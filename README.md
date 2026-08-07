@@ -54,7 +54,7 @@ catégorie `GDKP` avec deux salons en lecture seule, et y publie tout :
 | `/whoami` | tous | Fiche du perso lié : parse, budget, statut, lien vers les logs |
 | `/grade [membre]` | soi-même · admin pour autrui | Recalcule un membre |
 | `/refresh` | Gérer les rôles | Recalcule **tout** le roster |
-| `/panneau` | Gérer les rôles | Poste le panneau dans le salon courant |
+| `/panneau` | Gérer les rôles | Rafraîchit le panneau à sa place enregistrée |
 | `/tableau` | Gérer les rôles | (Re)poste le tableau du roster ici |
 | `/royaume nom` | Gérer le serveur | Change le royaume global appliqué à tous les persos |
 | `/setup` | Gérer le serveur | Crée rôles + salons, publie panneau et tableau (idempotent) |

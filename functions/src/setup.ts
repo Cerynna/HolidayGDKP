@@ -6,7 +6,7 @@ import {
   channelExists,
   createMessage,
   createRole,
-  deleteMessage,
+  editMessage,
   getGuildRoles,
   type PermissionOverwrite,
 } from './discord';
@@ -52,6 +52,28 @@ async function ensureRoles(guildId: string): Promise<string[]> {
 }
 
 /**
+ * Republie le panneau à sa place enregistrée : édite le message en place quand il
+ * existe encore, le recrée sinon. `fallbackChannelId` ne sert qu'au premier appel,
+ * avant qu'un salon de vérification ne soit connu.
+ */
+export async function refreshPanel(guildId: string, fallbackChannelId?: string): Promise<string> {
+  const g = await getGuildConfig(guildId);
+  const channelId = g.panelChannelId ?? fallbackChannelId;
+  if (!channelId) return '⚠️ Aucun salon de vérification connu. Lance `/setup` d’abord.';
+
+  const message = buildPanelMessage();
+  if (g.panelMessageId && g.panelChannelId === channelId) {
+    if (await editMessage(channelId, g.panelMessageId, message)) {
+      return `✅ Panneau mis à jour dans <#${channelId}>.`;
+    }
+  }
+
+  const panelMessageId = await createMessage(channelId, message);
+  await updateGuildConfig(guildId, { panelChannelId: channelId, panelMessageId });
+  return `✅ Panneau publié dans <#${channelId}>.`;
+}
+
+/**
  * Crée (ou réutilise) la catégorie + salons vérification & roster, y publie
  * le panneau et le tableau. Renvoie un message récap.
  */
@@ -79,13 +101,10 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
     }),
   );
 
-  // Publie le panneau (remplace l'ancien s'il existe → idempotent).
-  if (g.panelMessageId) await deleteMessage(panelChannelId, g.panelMessageId).catch(() => {});
-  const panelMessageId = await createMessage(panelChannelId, buildPanelMessage());
+  await updateGuildConfig(guildId, { categoryId, panelChannelId, rosterChannelId });
 
-  await updateGuildConfig(guildId, { categoryId, panelChannelId, rosterChannelId, panelMessageId });
-
-  // Publie / rafraîchit le tableau.
+  // Publie / rafraîchit le panneau et le tableau.
+  await refreshPanel(guildId);
   await postBoard(guildId, rosterChannelId);
 
   return (

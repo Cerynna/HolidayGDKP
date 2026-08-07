@@ -12,7 +12,6 @@ import { enqueue } from './jobs';
 import { normalizeRole, parseGold } from './service';
 import { InteractionType, InteractionResponseType, EPHEMERAL } from './discord';
 import {
-  buildPanelMessage,
   buildRoleSelectResponse,
   buildLinkModalResponse,
   buildReevalModalResponse,
@@ -143,8 +142,18 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
   const userId = interaction.member.user.id;
 
   switch (name) {
-    case 'panneau':
-      return { type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: buildPanelMessage() };
+    case 'panneau': {
+      if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
+      await enqueue({
+        kind: 'panel',
+        applicationId: interaction.application_id,
+        token: interaction.token,
+        guildId,
+        userId,
+        channelId: interaction.channel_id,
+      });
+      return deferredEphemeral();
+    }
 
     case 'whoami': {
       const link = await getLink(guildId, userId);

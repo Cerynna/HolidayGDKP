@@ -2,7 +2,7 @@
 import { setLink } from './store';
 import { runGrade, runRefresh } from './service';
 import { postBoard, updateBoard } from './board';
-import { runSetup } from './setup';
+import { runSetup, refreshPanel } from './setup';
 import { editOriginalResponse, type MessagePayload } from './discord';
 import type { PendingJob } from './types';
 
@@ -34,6 +34,8 @@ export async function processJob(job: PendingJob): Promise<void> {
       } else {
         payload = { content: '⚠️ Salon introuvable pour poster le tableau.' };
       }
+    } else if (job.kind === 'panel') {
+      payload = { content: await refreshPanel(job.guildId, job.channelId) };
     } else if (job.kind === 'setup') {
       payload = { content: await runSetup(job.guildId, job.applicationId) };
     } else {
