@@ -70,6 +70,15 @@ export function requiredRoles(cfg: Config): Array<{ name: string; color?: string
   return roles;
 }
 
+/** Couleur du grade portant ce nom de rôle, en entier Discord. */
+export function gradeColor(cfg: Config, roleName: string): number | undefined {
+  for (const table of Object.values(gradeTablesFor(cfg))) {
+    const g = table.find((x) => x.role.toLowerCase() === roleName.toLowerCase());
+    if (g?.color) return parseInt(g.color.replace('#', ''), 16);
+  }
+  return undefined;
+}
+
 /** Tous les noms de rôles de grade (minuscules). */
 export function allGradeRoleNames(cfg: Config): Set<string> {
   const tables = gradeTablesFor(cfg);

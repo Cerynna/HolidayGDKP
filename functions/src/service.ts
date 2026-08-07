@@ -9,7 +9,6 @@ import {
   allGradeRoleNames,
   allFinanceRoleNames,
   allStatusRoleNames,
-  type MemberStatus,
 } from './grades';
 import {
   getGuildRoles,
@@ -21,6 +20,7 @@ import {
   type DiscordRole,
 } from './discord';
 import { updateBoard } from './board';
+import { statusBadge, fmtGold, STATUS_TEXT } from './format';
 import type { CharacterPerformance, LinkSummary, WclMetric } from './types';
 
 export function normalizeRole(input: string | null | undefined): WclMetric {
@@ -45,9 +45,6 @@ export function parseGold(input: string | null | undefined): number {
 
 function fmt(v: number | null | undefined): string {
   return v === null || v === undefined ? '—' : v.toFixed(1);
-}
-function fmtGold(g: number): string {
-  return g >= 1000 ? `${Math.round(g / 1000)}k` : `${g}`;
 }
 
 function formatPerf(character: CharacterPerformance): string {
@@ -107,13 +104,6 @@ function buildNick(parseScore: number | null, financeEmoji: string, base: string
   const room = Math.max(1, 32 - prefix.length);
   return (prefix + base).slice(0, prefix.length + room);
 }
-
-const STATUS_TEXT: Record<MemberStatus, string> = {
-  valid: '✅ **Validé** pour le raid.',
-  caddie: '🛒 **Caddie** (sac à PO) — parse faible mais budget OK.',
-  refused: '⛔ **Non éligible** — parse < seuil et budget insuffisant.',
-  nograde: '⚪ Aucun grade attribuable.',
-};
 
 interface GradeResult {
   message: string;
@@ -267,7 +257,7 @@ export async function runRefresh(guildId: string): Promise<string> {
       );
       await setLink(guildId, link.userId, { ...link, summary });
       ok++;
-      const badge = summary.status === 'valid' ? '✅' : summary.status === 'caddie' ? '🛒' : '⛔';
+      const badge = statusBadge(summary.status);
       lines.push(
         `${badge} ${summary.char} : ${summary.parseEmoji}${summary.parseScore}% · ${summary.financeEmoji}${summary.financeRole}`,
       );

@@ -2,30 +2,11 @@
 // Trié par parse décroissant puis or décroissant.
 import { allLinks, getGuildConfig, setBoard } from './store';
 import { createMessage, editMessage, deleteMessage } from './discord';
+import { roleEmoji, statusBadge, fmtGold } from './format';
 import type { LinkSummary } from './types';
 
 const MAX_DESC = 3900; // marge sous la limite embed (4096)
 const COLOR = 0xe5cc80;
-
-function statusBadge(status: LinkSummary['status']): string {
-  switch (status) {
-    case 'valid':
-      return '✅';
-    case 'caddie':
-      return '🛒';
-    case 'refused':
-      return '⛔';
-    default:
-      return '⚪';
-  }
-}
-function fmtGold(g: number): string {
-  return g >= 1_000_000
-    ? `${(g / 1_000_000).toFixed(1)}m`
-    : g >= 1000
-      ? `${Math.round(g / 1000)}k`
-      : `${g}`;
-}
 
 interface Row {
   userId: string;
@@ -40,17 +21,10 @@ async function fetchRows(guildId: string): Promise<{ rows: Row[]; total: number;
   return { rows, total: links.length, notGraded: links.length - rows.length };
 }
 
-const ROLE_EMOJI: Record<'tank' | 'heal' | 'dps', string> = {
-  tank: '🛡️',
-  heal: '💚',
-  dps: '⚔️',
-};
-
 function lineFor(r: Row): string {
   const s = r.summary;
-  const role = ROLE_EMOJI[s.role] ?? '⚔️';
   return (
-    `${statusBadge(s.status)} <@${r.userId}> — [**${s.char}**](${s.logUrl}) ${role} · ` +
+    `${statusBadge(s.status)} <@${r.userId}> — [**${s.char}**](${s.logUrl}) ${roleEmoji(s.role)} · ` +
     `${s.parseEmoji} ${s.parseScore}% · ${s.financeEmoji} ${fmtGold(s.gold)}`
   );
 }

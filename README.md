@@ -51,7 +51,7 @@ catégorie `GDKP` avec deux salons en lecture seule, et y publie tout :
 |---|---|---|
 | `/link perso [role] [or]` | tous | Lie un perso (équivalent textuel du bouton Postuler) |
 | `/unlink` | tous | Supprime le lien et **libère le perso** |
-| `/whoami` | tous | Affiche le perso lié, son rôle et son or |
+| `/whoami` | tous | Fiche du perso lié : parse, budget, statut, lien vers les logs |
 | `/grade [membre]` | soi-même · admin pour autrui | Recalcule un membre |
 | `/refresh` | Gérer les rôles | Recalcule **tout** le roster |
 | `/panneau` | Gérer les rôles | Poste le panneau dans le salon courant |
@@ -219,6 +219,7 @@ functions/src/
   discord.ts        # appels REST Discord v10 (rôles, membres, salons, messages)
   panel.ts          # panneau règlement, boutons, select de rôle, modals
   board.ts          # tableau du roster paginé en embeds
+  format.ts         # helpers de présentation partagés (emojis, or, statuts)
   setup.ts          # création idempotente de la catégorie et des salons
   store.ts          # accès Firestore (liens, claims, config globale)
   config.ts         # configuration embarquée

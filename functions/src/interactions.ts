@@ -22,7 +22,10 @@ import {
   LINK_MODAL_PREFIX,
   REEVAL_MODAL_ID,
 } from './panel';
-import type { WclMetric } from './types';
+import { roleEmoji, fmtGold, STATUS_TEXT } from './format';
+import { gradeColor } from './grades';
+import { config as cfg } from './config';
+import type { Link, WclMetric } from './types';
 
 const MANAGE_ROLES = 1n << 28n;
 const MANAGE_GUILD = 1n << 5n;
@@ -45,6 +48,12 @@ type GuildInteraction = Interaction & {
 
 function ephemeral(content: string): unknown {
   return { type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: EPHEMERAL, content } };
+}
+function ephemeralEmbed(embed: unknown): unknown {
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: EPHEMERAL, embeds: [embed] },
+  };
 }
 function deferredEphemeral(): unknown {
   return { type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } };
@@ -111,6 +120,44 @@ async function startLink(
   return deferredEphemeral();
 }
 
+/**
+ * Fiche du perso lié. Le résumé du dernier calcul suffit : pas d'appel WCL,
+ * la commande doit répondre dans les 3 s imposées par Discord.
+ */
+function buildWhoamiEmbed(link: Link, realm: string): unknown {
+  const s = link.summary;
+  if (!s) {
+    return {
+      color: 0x999999,
+      title: `🔗 ${link.name}-${realm}`,
+      description:
+        `Rôle déclaré : **${link.wclMetric ?? 'auto'}** · Or : **${fmtGold(link.gold ?? 0)} PO**\n\n` +
+        '⏳ Pas encore analysé — lance `/grade` ou le bouton **🔄 Réévaluer**.',
+    };
+  }
+
+  return {
+    color: gradeColor(cfg, s.parseRole) ?? 0xe5cc80,
+    title: `${roleEmoji(s.role)} ${s.char}-${realm}`,
+    url: s.logUrl,
+    description: STATUS_TEXT[s.status],
+    fields: [
+      {
+        name: '📊 Parse',
+        value: `${s.parseEmoji} **${s.parseRole}** — ${s.parseScore}% (${s.parseDiff})`,
+        inline: true,
+      },
+      {
+        name: '💰 Budget',
+        value: `${s.financeEmoji} **${s.financeRole}** — ${fmtGold(s.gold)} PO`,
+        inline: true,
+      },
+    ],
+    footer: { text: 'Clique sur le titre pour ouvrir les logs' },
+    timestamp: new Date(s.updatedAt).toISOString(),
+  };
+}
+
 async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
   const name = interaction.data.name as string;
   const guildId = interaction.guild_id;
@@ -122,12 +169,8 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
 
     case 'whoami': {
       const link = await getLink(guildId, userId);
-      const realm = await getRealm(guildId);
-      return ephemeral(
-        link
-          ? `🔗 Lié à **${link.name}-${realm}** — rôle : ${link.wclMetric ?? 'auto'} · or : ${link.gold ?? 0} PO.`
-          : "ℹ️ Aucun perso lié. Utilise le bouton **Postuler** ou `/link`.",
-      );
+      if (!link) return ephemeral("ℹ️ Aucun perso lié. Utilise le bouton **📝 Postuler** ou `/link`.");
+      return ephemeralEmbed(buildWhoamiEmbed(link, await getRealm(guildId)));
     }
 
     case 'unlink': {
