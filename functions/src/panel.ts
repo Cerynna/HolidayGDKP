@@ -16,16 +16,16 @@ function allGrades(): Grade[] {
 const RULES_DESCRIPTION = [
   'Bienvenue chez Holidays GDKP ! Afin d’assurer des raids rapides, propres et agréables pour tous, merci de prendre connaissance de nos règles :',
   '',
-  '### ⚙️ Conditions & fonctionnement du Jeudi',
+  '### ⚙️ Conditions & fonctionnement',
   '- **Exigence :** Logs **BLEUS (50+) minimum**, personnage optimisé & consommables prêts.',
   '- **Addon obligatoire :** **Gargul** (à jour via CurseForge) pour la gestion des enchères et des loots.',
-  '- **Prime à la performance :** l’organisation ne prend **aucune commission** sur le raid du jeudi ! Les **10 % de frais orga** sont **100 % redistribués** le lendemain en bonus cash au **Top 10 performance** (DPS / Heal / Tank).',
+  '- **Prime à la performance :** l’organisation ne prend **aucune commission** ! Les **10 % de frais orga** sont **100 % redistribués** le lendemain du raid en bonus cash au **Top 10 performance** (DPS / Heal / Tank).',
   '- **Règle anti-parse monkey :** le respect des strats passe avant les chiffres. Le Raid Leader / Staff se réserve le droit de **disqualifier de la prime** tout joueur qui ignore les mécaniques ou met le groupe en danger pour monter ses logs.',
   '',
   '### 💰 Enchères & Pot (GDKP)',
   '- **Normal (NM) :** enchères dès **10 000 po (10k)** — **Héroïque (HM) :** dès **30 000 po (30k)**',
   '- **Off-Spec :** moitié prix — **Transmo :** dès **1 000 po (1k)** — Surenchères de **1k en 1k**.',
-  '- **Distribution :** **90 %** du pot final réparti équitablement en fin de raid entre les membres éligibles (**100 % redistribué** pour le raid du Jeudi).',
+  '- **Distribution :** **90 %** du pot final réparti équitablement en fin de raid entre les membres éligibles ; les **10 %** restants repartent en prime de performance — soit **100 % du pot redistribué**.',
   '',
   '⛔ Tout comportement toxique, AFK délibéré ou tentative d’escroquerie entraînera une **exclusion immédiate sans part du pot**.',
 ].join('\n');
@@ -45,7 +45,7 @@ export function buildPanelMessage(): { embeds: unknown[]; components: unknown[] 
 
   const rulesEmbed = {
     color: 0xe5cc80,
-    title: '🏰 HOLIDAYS GDKP — Règlement & Raid du Jeudi Soir',
+    title: '🏰 HOLIDAYS GDKP — Règlement & fonctionnement des raids',
     description: RULES_DESCRIPTION,
   };
 
@@ -58,7 +58,7 @@ export function buildPanelMessage(): { embeds: unknown[]; components: unknown[] 
       '**📊 Statuts d’accès au raid**',
       `- ✅ **${accessRole}** — parse moyen **≥ ${minParse} %** (place de raid garantie / prioritaire)`,
       `- 🛒 **Caddie / Buyer** — parse < ${minParse} % mais **budget ≥ ${caddieK}k po** (sac à PO)`,
-      '- 🔴 **Refusé** — parse trop faible et budget insuffisant',
+      '- ⛔ **Refusé** — parse trop faible et budget insuffisant',
       '',
       `**🎨 Grades de parse (couleur de pseudo)**`,
       `${legend}`,
