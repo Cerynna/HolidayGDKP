@@ -1,29 +1,16 @@
 {
-  "name": "discord-wow-bot",
+  "name": "holiday-gdkp",
   "version": "1.0.0",
-  "description": "Bot Discord qui attribue des grades selon les perfs Warcraft Logs",
+  "description": "Bot Discord GDKP — enregistrement des commandes slash",
   "type": "module",
-  "main": "dist/index.js",
+  "private": true,
   "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts",
-    "deploy": "tsx src/deploy-commands.ts",
-    "setup:roles": "tsx src/setup-roles.ts",
-    "build": "tsc",
-    "start:prod": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "register": "node register-commands.mjs"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "discord.js": "^14.16.3",
-    "dotenv": "^16.4.5",
-    "firebase-admin": "^14.2.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "dotenv": "^16.4.5"
   }
 }
