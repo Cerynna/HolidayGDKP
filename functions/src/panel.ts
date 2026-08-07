@@ -57,7 +57,7 @@ export function buildPanelMessage(): { embeds: unknown[]; components: unknown[] 
       '',
       '**📊 Statuts d’accès au raid**',
       `- ✅ **${accessRole}** — parse moyen **≥ ${minParse} %** (place de raid garantie / prioritaire)`,
-      `- 🛒 **Caddie / Buyer** — parse < ${minParse} % mais **budget ≥ ${caddieK}k po** (place assurée)`,
+      `- 🛒 **Caddie / Buyer** — parse < ${minParse} % mais **budget ≥ ${caddieK}k po**`,
       '- ⛔ **Refusé** — parse trop faible et budget insuffisant',
       '',
       `**🎨 Grades de parse (couleur de pseudo)**`,
