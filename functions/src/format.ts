@@ -28,7 +28,7 @@ export function statusBadge(status: LinkSummary['status']): string {
 
 export const STATUS_TEXT: Record<LinkSummary['status'], string> = {
   valid: '✅ **Validé** pour le raid.',
-  caddie: '🛒 **Caddie** (sac à PO) — parse faible mais budget OK.',
+  caddie: '🛒 **Caddie** — parse sous le seuil, mais budget validé.',
   refused: '⛔ **Non éligible** — parse < seuil et budget insuffisant.',
   nograde: '⚪ Aucun grade attribuable.',
 };
