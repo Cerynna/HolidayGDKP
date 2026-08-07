@@ -95,7 +95,7 @@ L'or est saisi librement (`150k`, `150 000`, `1.5m`) et normalisé par `parseGol
 
 | Statut | Rôle | Condition |
 |---|---|---|
-| 🪙 Validé | `Valid` | parse ≥ 50 |
+| ✅ Validé | `Valid` | parse ≥ 50 |
 | 🛒 Caddie | `Caddie` | parse < 50 **mais** or ≥ 100 000 PO |
 | ⛔ Refusé | *(aucun)* | parse < 50 **et** or < 100 000 PO |
 

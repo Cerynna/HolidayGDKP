@@ -109,7 +109,7 @@ function buildNick(parseScore: number | null, financeEmoji: string, base: string
 }
 
 const STATUS_TEXT: Record<MemberStatus, string> = {
-  valid: '🪙 **Validé** pour le raid.',
+  valid: '✅ **Validé** pour le raid.',
   caddie: '🛒 **Caddie** (sac à PO) — parse faible mais budget OK.',
   refused: '⛔ **Non éligible** — parse < seuil et budget insuffisant.',
   nograde: '⚪ Aucun grade attribuable.',
@@ -267,7 +267,7 @@ export async function runRefresh(guildId: string): Promise<string> {
       );
       await setLink(guildId, link.userId, { ...link, summary });
       ok++;
-      const badge = summary.status === 'valid' ? '🪙' : summary.status === 'caddie' ? '🛒' : '⛔';
+      const badge = summary.status === 'valid' ? '✅' : summary.status === 'caddie' ? '🛒' : '⛔';
       lines.push(
         `${badge} ${summary.char} : ${summary.parseEmoji}${summary.parseScore}% · ${summary.financeEmoji}${summary.financeRole}`,
       );

@@ -10,7 +10,7 @@ const COLOR = 0xe5cc80;
 function statusBadge(status: LinkSummary['status']): string {
   switch (status) {
     case 'valid':
-      return '🪙';
+      return '✅';
     case 'caddie':
       return '🛒';
     case 'refused':
@@ -76,7 +76,7 @@ export function renderBoardPages(rows: Row[], total: number, notGraded: number):
     description: desc,
     footer: {
       text:
-        `🪙 Valid · 🛒 Caddie · ⛔ Refusé · trié par parse puis or${suffix}` +
+        `✅ Valid · 🛒 Caddie · ⛔ Refusé · trié par parse puis or${suffix}` +
         (chunks.length > 1 ? ` — page ${i + 1}/${chunks.length}` : ''),
     },
   }));

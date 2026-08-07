@@ -56,7 +56,7 @@ export function buildPanelMessage(): { embeds: unknown[]; components: unknown[] 
       'Pour valider votre participation, **liez votre personnage**. Le bot analyse automatiquement vos **WarcraftLogs** et votre **budget en or** pour vous attribuer un **statut de raid** et la **couleur de votre pseudo** :',
       '',
       '**📊 Statuts d’accès au raid**',
-      `- 🟢 **${accessRole}** — parse moyen **≥ ${minParse} %** (place de raid garantie / prioritaire)`,
+      `- ✅ **${accessRole}** — parse moyen **≥ ${minParse} %** (place de raid garantie / prioritaire)`,
       `- 🛒 **Caddie / Buyer** — parse < ${minParse} % mais **budget ≥ ${caddieK}k po** (sac à PO)`,
       '- 🔴 **Refusé** — parse trop faible et budget insuffisant',
       '',
