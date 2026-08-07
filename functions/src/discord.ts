@@ -128,19 +128,19 @@ export async function createRole(guildId: string, name: string, hex?: string): P
   return (await res.json()) as DiscordRole;
 }
 
-/** Édite la réponse différée (followup) — token valide 15 min. */
-export async function editOriginalResponse(
-  applicationId: string,
-  token: string,
-  content: string,
-): Promise<void> {
-  await rest('PATCH', `/webhooks/${applicationId}/${token}/messages/@original`, { content });
-}
-
 export interface MessagePayload {
   content?: string;
   embeds?: unknown[];
   components?: unknown[];
+}
+
+/** Édite la réponse différée (followup) — token valide 15 min. */
+export async function editOriginalResponse(
+  applicationId: string,
+  token: string,
+  payload: MessagePayload,
+): Promise<void> {
+  await rest('PATCH', `/webhooks/${applicationId}/${token}/messages/@original`, payload);
 }
 
 /** Poste un message dans un salon, renvoie son id. */

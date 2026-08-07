@@ -22,9 +22,7 @@ import {
   LINK_MODAL_PREFIX,
   REEVAL_MODAL_ID,
 } from './panel';
-import { roleEmoji, fmtGold, STATUS_TEXT } from './format';
-import { gradeColor } from './grades';
-import { config as cfg } from './config';
+import { fmtGold, buildSummaryEmbed } from './format';
 import type { Link, WclMetric } from './types';
 
 const MANAGE_ROLES = 1n << 28n;
@@ -136,26 +134,7 @@ function buildWhoamiEmbed(link: Link, realm: string): unknown {
     };
   }
 
-  return {
-    color: gradeColor(cfg, s.parseRole) ?? 0xe5cc80,
-    title: `${roleEmoji(s.role)} ${s.char}-${realm}`,
-    url: s.logUrl,
-    description: STATUS_TEXT[s.status],
-    fields: [
-      {
-        name: '📊 Parse',
-        value: `${s.parseEmoji} **${s.parseRole}** — ${s.parseScore}% (${s.parseDiff})`,
-        inline: true,
-      },
-      {
-        name: '💰 Budget',
-        value: `${s.financeEmoji} **${s.financeRole}** — ${fmtGold(s.gold)} PO`,
-        inline: true,
-      },
-    ],
-    footer: { text: 'Clique sur le titre pour ouvrir les logs' },
-    timestamp: new Date(s.updatedAt).toISOString(),
-  };
+  return buildSummaryEmbed(s, realm);
 }
 
 async function handleCommand(interaction: GuildInteraction): Promise<unknown> {

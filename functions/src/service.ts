@@ -18,9 +18,10 @@ import {
   setRoleColor,
   setNickname,
   type DiscordRole,
+  type MessagePayload,
 } from './discord';
 import { updateBoard } from './board';
-import { statusBadge, fmtGold, STATUS_TEXT } from './format';
+import { statusBadge, buildSummaryEmbed } from './format';
 import type { CharacterPerformance, LinkSummary, WclMetric } from './types';
 
 export function normalizeRole(input: string | null | undefined): WclMetric {
@@ -106,7 +107,7 @@ function buildNick(parseScore: number | null, financeEmoji: string, base: string
 }
 
 interface GradeResult {
-  message: string;
+  perfDetail: string;
   summary: LinkSummary;
 }
 
@@ -190,28 +191,22 @@ async function gradeMemberCore(
     updatedAt: Date.now(),
   };
 
-  const message =
-    `✅ **${character.name}-${realm}**\n` +
-    `${formatPerf(character)}\n` +
-    `→ Parse ${summary.parseEmoji} **${summary.parseRole}**` +
-    (resolved ? ` (${fmt(parseScore)}% ${summary.parseDiff})` : '') +
-    ` · Finance ${finance.emoji} **${finance.role}** (${fmtGold(gold)})\n` +
-    STATUS_TEXT[status];
-
-  return { message, summary };
+  return { perfDetail: formatPerf(character), summary };
 }
 
 /** /link et /grade : traite un membre, met à jour le tableau. */
-export async function runGrade(guildId: string, userId: string): Promise<string> {
+export async function runGrade(guildId: string, userId: string): Promise<MessagePayload> {
   const link = await getLink(guildId, userId);
-  if (!link) return "ℹ️ Aucun perso lié. Utilise le bouton **Postuler** ou `/link`.";
+  if (!link) {
+    return { content: "ℹ️ Aucun perso lié. Utilise le bouton **📝 Postuler** ou `/link`." };
+  }
 
   const member = await getMember(guildId, userId);
-  if (!member) return '⚠️ Membre introuvable sur le serveur.';
+  if (!member) return { content: '⚠️ Membre introuvable sur le serveur.' };
 
   const roles = await getGuildRoles(guildId);
   const realm = await getRealm(guildId);
-  const { message, summary } = await gradeMemberCore(
+  const { perfDetail, summary } = await gradeMemberCore(
     guildId,
     userId,
     link.name,
@@ -224,13 +219,17 @@ export async function runGrade(guildId: string, userId: string): Promise<string>
 
   await setLink(guildId, userId, { ...link, summary });
   await updateBoard(guildId).catch(() => {});
-  return message;
+
+  const embed = buildSummaryEmbed(summary, realm, [
+    { name: '🗡️ Détail par difficulté', value: perfDetail },
+  ]);
+  return { embeds: [embed] };
 }
 
 /** /refresh : recalcule tout le roster. */
-export async function runRefresh(guildId: string): Promise<string> {
+export async function runRefresh(guildId: string): Promise<MessagePayload> {
   const links = await allLinks(guildId);
-  if (links.length === 0) return 'ℹ️ Aucun membre lié pour le moment.';
+  if (links.length === 0) return { content: 'ℹ️ Aucun membre lié pour le moment.' };
 
   const roles = await getGuildRoles(guildId);
   const realm = await getRealm(guildId);
@@ -269,7 +268,7 @@ export async function runRefresh(guildId: string): Promise<string> {
 
   await updateBoard(guildId).catch(() => {});
   const header = `**Refresh** — ${links.length} lié(s), ${ok} classé(s), ${errors} erreur(s).\n`;
-  return truncate(header + lines.join('\n'), 1900);
+  return { content: truncate(header + lines.join('\n'), 1900) };
 }
 
 function truncate(s: string, n: number): string {
