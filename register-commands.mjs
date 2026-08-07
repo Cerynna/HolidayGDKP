@@ -60,15 +60,32 @@ const commands = [
   },
 ];
 
-const url = `https://discord.com/api/v10/applications/${DISCORD_CLIENT_ID}/guilds/${DISCORD_GUILD_ID}/commands`;
+// --guild : enregistre sur DISCORD_GUILD_ID (instantané, pour itérer en dev).
+// --clear-guild : vide les commandes de cette guilde (utile après un passage en global,
+// sinon les anciennes commandes de guilde s'affichent en double).
+const guildScoped = process.argv.includes('--guild');
+const clearGuild = process.argv.includes('--clear-guild');
+
+const base = `https://discord.com/api/v10/applications/${DISCORD_CLIENT_ID}`;
+const url =
+  guildScoped || clearGuild ? `${base}/guilds/${DISCORD_GUILD_ID}/commands` : `${base}/commands`;
+
 const res = await fetch(url, {
   method: 'PUT',
   headers: { Authorization: `Bot ${DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify(commands),
+  body: JSON.stringify(clearGuild ? [] : commands),
 });
-if (res.ok) {
-  const data = await res.json();
-  console.log(`✅ ${data.length} commandes déployées :`, data.map((c) => '/' + c.name).join(' '));
-} else {
+
+if (!res.ok) {
   console.log('❌ Échec', res.status, await res.text());
+  process.exit(1);
+}
+
+const data = await res.json();
+if (clearGuild) {
+  console.log(`🧹 Commandes de la guilde ${DISCORD_GUILD_ID} supprimées.`);
+} else {
+  const scope = guildScoped ? `guilde ${DISCORD_GUILD_ID}` : 'global (tous les serveurs)';
+  console.log(`✅ ${data.length} commandes déployées — ${scope} :`, data.map((c) => '/' + c.name).join(' '));
+  if (!guildScoped) console.log('ℹ️ La propagation globale peut prendre jusqu’à 1 h.');
 }

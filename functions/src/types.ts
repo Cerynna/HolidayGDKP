@@ -75,12 +75,11 @@ export interface Link {
   summary?: LinkSummary;
 }
 
-/** Config globale modifiable par un admin (Firestore config/global). */
-export interface GlobalConfig {
+/** Config d'une guilde, modifiable par un admin (Firestore guilds/{guildId}). */
+export interface GuildConfig {
   realm?: string;
   boardChannelId?: string;
   boardMessageIds?: string[]; // pagination : un message par page
-  boardMessageId?: string; // legacy (ancien tableau à message unique)
   categoryId?: string;
   panelChannelId?: string;
   panelMessageId?: string;

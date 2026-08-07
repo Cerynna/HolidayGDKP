@@ -37,6 +37,12 @@ interface Interaction {
   data?: any;
 }
 
+/** Interaction émise depuis un serveur : `guild_id` et `member` sont garantis. */
+type GuildInteraction = Interaction & {
+  guild_id: string;
+  member: NonNullable<Interaction['member']>;
+};
+
 function ephemeral(content: string): unknown {
   return { type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: EPHEMERAL, content } };
 }
@@ -46,22 +52,27 @@ function deferredEphemeral(): unknown {
 function getOption(interaction: Interaction, name: string): string | undefined {
   return (interaction.data?.options ?? []).find((o: any) => o.name === name)?.value;
 }
-function hasPerm(interaction: Interaction, perm: bigint): boolean {
+function hasPerm(interaction: GuildInteraction, perm: bigint): boolean {
   try {
-    return (BigInt(interaction.member?.permissions ?? '0') & perm) !== 0n;
+    return (BigInt(interaction.member.permissions ?? '0') & perm) !== 0n;
   } catch {
     return false;
   }
 }
 
 export async function handleInteraction(interaction: Interaction): Promise<unknown> {
-  switch (interaction.type) {
+  if (!interaction.guild_id || !interaction.member) {
+    return ephemeral("ℹ️ Ce bot s'utilise depuis un serveur, pas en message privé.");
+  }
+  const inGuild = interaction as GuildInteraction;
+
+  switch (inGuild.type) {
     case InteractionType.APPLICATION_COMMAND:
-      return handleCommand(interaction);
+      return handleCommand(inGuild);
     case InteractionType.MESSAGE_COMPONENT:
-      return handleComponent(interaction);
+      return handleComponent(inGuild);
     case InteractionType.MODAL_SUBMIT:
-      return handleModal(interaction);
+      return handleModal(inGuild);
     default:
       return ephemeral('Interaction non gérée.');
   }
@@ -69,15 +80,16 @@ export async function handleInteraction(interaction: Interaction): Promise<unkno
 
 /** Réclame le perso puis met le job de liaison en file. Renvoie la réponse. */
 async function startLink(
-  interaction: Interaction,
+  interaction: GuildInteraction,
   name: string,
   gold: number,
   wclMetric: WclMetric,
 ): Promise<unknown> {
-  const userId = interaction.member!.user.id;
-  const realm = await getRealm();
+  const guildId = interaction.guild_id;
+  const userId = interaction.member.user.id;
+  const realm = await getRealm(guildId);
   try {
-    await claimCharacter(userId, name, realm);
+    await claimCharacter(guildId, userId, name, realm);
   } catch (e) {
     if (e instanceof ClaimTakenError) {
       return ephemeral(
@@ -90,7 +102,7 @@ async function startLink(
     kind: 'link',
     applicationId: interaction.application_id,
     token: interaction.token,
-    guildId: interaction.guild_id!,
+    guildId,
     userId,
     name,
     gold,
@@ -99,18 +111,18 @@ async function startLink(
   return deferredEphemeral();
 }
 
-async function handleCommand(interaction: Interaction): Promise<unknown> {
+async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
   const name = interaction.data.name as string;
-  const guildId = interaction.guild_id!;
-  const userId = interaction.member!.user.id;
+  const guildId = interaction.guild_id;
+  const userId = interaction.member.user.id;
 
   switch (name) {
     case 'panneau':
       return { type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: buildPanelMessage() };
 
     case 'whoami': {
-      const link = await getLink(userId);
-      const realm = await getRealm();
+      const link = await getLink(guildId, userId);
+      const realm = await getRealm(guildId);
       return ephemeral(
         link
           ? `🔗 Lié à **${link.name}-${realm}** — rôle : ${link.wclMetric ?? 'auto'} · or : ${link.gold ?? 0} PO.`
@@ -119,7 +131,7 @@ async function handleCommand(interaction: Interaction): Promise<unknown> {
     }
 
     case 'unlink': {
-      const existed = await removeLink(userId);
+      const existed = await removeLink(guildId, userId);
       if (existed) {
         // Rafraîchit le tableau en arrière-plan (perso retiré).
         await enqueue({
@@ -172,7 +184,7 @@ async function handleCommand(interaction: Interaction): Promise<unknown> {
     case 'royaume': {
       if (!hasPerm(interaction, MANAGE_GUILD)) return ephemeral('❌ Réservé aux admins du serveur.');
       const realm = getOption(interaction, 'nom')!;
-      await setRealm(realm);
+      await setRealm(guildId, realm);
       return ephemeral(`✅ Royaume par défaut défini : **${realm}** (appliqué à tous les persos).`);
     }
 
@@ -206,14 +218,14 @@ async function handleCommand(interaction: Interaction): Promise<unknown> {
   }
 }
 
-async function handleComponent(interaction: Interaction): Promise<unknown> {
+async function handleComponent(interaction: GuildInteraction): Promise<unknown> {
   const customId = interaction.data.custom_id as string;
   if (customId === LINK_BUTTON_ID) return buildRoleSelectResponse();
   if (customId === ROLE_SELECT_ID) return buildLinkModalResponse(interaction.data.values?.[0] ?? 'auto');
 
   if (customId === REEVAL_BUTTON_ID) {
-    const userId = interaction.member!.user.id;
-    const link = await getLink(userId);
+    const userId = interaction.member.user.id;
+    const link = await getLink(interaction.guild_id, userId);
     if (!link) {
       return ephemeral("ℹ️ Tu n'as pas encore de perso lié. Clique sur **📝 Postuler** d'abord.");
     }
@@ -224,7 +236,7 @@ async function handleComponent(interaction: Interaction): Promise<unknown> {
   return ephemeral('Action inconnue.');
 }
 
-async function handleModal(interaction: Interaction): Promise<unknown> {
+async function handleModal(interaction: GuildInteraction): Promise<unknown> {
   const customId = interaction.data.custom_id as string;
   const fields: Record<string, string> = {};
   for (const row of interaction.data.components ?? []) {
@@ -233,17 +245,18 @@ async function handleModal(interaction: Interaction): Promise<unknown> {
 
   // Réévaluation : met à jour l'or et relance l'analyse (perso inchangé).
   if (customId === REEVAL_MODAL_ID) {
-    const userId = interaction.member!.user.id;
-    const link = await getLink(userId);
+    const guildId = interaction.guild_id;
+    const userId = interaction.member.user.id;
+    const link = await getLink(guildId, userId);
     if (!link) {
       return ephemeral("ℹ️ Tu n'as pas de perso lié. Clique sur **📝 Postuler** d'abord.");
     }
-    await setLink(userId, { ...link, gold: parseGold(fields.gold) });
+    await setLink(guildId, userId, { ...link, gold: parseGold(fields.gold) });
     await enqueue({
       kind: 'grade',
       applicationId: interaction.application_id,
       token: interaction.token,
-      guildId: interaction.guild_id!,
+      guildId,
       userId,
       targetUserId: userId,
     });

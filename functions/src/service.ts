@@ -213,14 +213,14 @@ async function gradeMemberCore(
 
 /** /link et /grade : traite un membre, met à jour le tableau. */
 export async function runGrade(guildId: string, userId: string): Promise<string> {
-  const link = await getLink(userId);
+  const link = await getLink(guildId, userId);
   if (!link) return "ℹ️ Aucun perso lié. Utilise le bouton **Postuler** ou `/link`.";
 
   const member = await getMember(guildId, userId);
   if (!member) return '⚠️ Membre introuvable sur le serveur.';
 
   const roles = await getGuildRoles(guildId);
-  const realm = await getRealm();
+  const realm = await getRealm(guildId);
   const { message, summary } = await gradeMemberCore(
     guildId,
     userId,
@@ -232,18 +232,18 @@ export async function runGrade(guildId: string, userId: string): Promise<string>
     member,
   );
 
-  await setLink(userId, { ...link, summary });
-  await updateBoard().catch(() => {});
+  await setLink(guildId, userId, { ...link, summary });
+  await updateBoard(guildId).catch(() => {});
   return message;
 }
 
 /** /refresh : recalcule tout le roster. */
 export async function runRefresh(guildId: string): Promise<string> {
-  const links = await allLinks();
+  const links = await allLinks(guildId);
   if (links.length === 0) return 'ℹ️ Aucun membre lié pour le moment.';
 
   const roles = await getGuildRoles(guildId);
-  const realm = await getRealm();
+  const realm = await getRealm(guildId);
   const lines: string[] = [];
   let ok = 0;
   let errors = 0;
@@ -265,7 +265,7 @@ export async function runRefresh(guildId: string): Promise<string> {
         roles,
         member,
       );
-      await setLink(link.userId, { ...link, summary });
+      await setLink(guildId, link.userId, { ...link, summary });
       ok++;
       const badge = summary.status === 'valid' ? '🪙' : summary.status === 'caddie' ? '🛒' : '⛔';
       lines.push(
@@ -277,7 +277,7 @@ export async function runRefresh(guildId: string): Promise<string> {
     }
   }
 
-  await updateBoard().catch(() => {});
+  await updateBoard(guildId).catch(() => {});
   const header = `**Refresh** — ${links.length} lié(s), ${ok} classé(s), ${errors} erreur(s).\n`;
   return truncate(header + lines.join('\n'), 1900);
 }

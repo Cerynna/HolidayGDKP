@@ -46,6 +46,30 @@ function gradeTablesFor(cfg: Config): Record<string, Grade[]> {
   return out;
 }
 
+/**
+ * Tous les rôles que le bot doit pouvoir attribuer, avec leur casse et leur couleur
+ * d'origine, du plus prestigieux au moins. Sert à les créer sur un nouveau serveur.
+ */
+export function requiredRoles(cfg: Config): Array<{ name: string; color?: string }> {
+  const roles: Array<{ name: string; color?: string }> = [];
+  const seen = new Set<string>();
+  const add = (name: string, color?: string) => {
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    roles.push({ name, color });
+  };
+
+  for (const table of Object.values(gradeTablesFor(cfg))) {
+    for (const g of table) add(g.role, g.color);
+  }
+  for (const g of [...cfg.financeGrades].sort((a, b) => b.min - a.min)) add(g.role);
+  if (cfg.raidAccess) add(cfg.raidAccess.role);
+  add(cfg.caddie.role);
+
+  return roles;
+}
+
 /** Tous les noms de rôles de grade (minuscules). */
 export function allGradeRoleNames(cfg: Config): Set<string> {
   const tables = gradeTablesFor(cfg);

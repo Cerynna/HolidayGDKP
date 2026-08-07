@@ -9,14 +9,14 @@ import type { PendingJob } from './types';
 export async function processJob(job: PendingJob): Promise<void> {
   // Rafraîchissement silencieux du tableau (ex: après /unlink) — pas de réponse à éditer.
   if (job.kind === 'refreshBoard') {
-    await updateBoard().catch(() => {});
+    await updateBoard(job.guildId).catch(() => {});
     return;
   }
 
   let content: string;
   try {
     if (job.kind === 'link') {
-      await setLink(job.userId, {
+      await setLink(job.guildId, job.userId, {
         name: job.name!,
         wclMetric: job.wclMetric ?? 'auto',
         gold: job.gold ?? 0,
@@ -29,7 +29,7 @@ export async function processJob(job: PendingJob): Promise<void> {
       content = await runRefresh(job.guildId);
     } else if (job.kind === 'board') {
       if (job.channelId) {
-        await postBoard(job.channelId);
+        await postBoard(job.guildId, job.channelId);
         content = '✅ Tableau du roster posté (il se mettra à jour automatiquement).';
       } else {
         content = '⚠️ Salon introuvable pour poster le tableau.';

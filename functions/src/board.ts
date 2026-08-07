@@ -1,6 +1,6 @@
 // Tableau admin paginé (embeds) : membre -> perso (lien logs) -> parse -> finance -> statut.
 // Trié par parse décroissant puis or décroissant.
-import { allLinks, getGlobalConfig, setBoard } from './store';
+import { allLinks, getGuildConfig, setBoard } from './store';
 import { createMessage, editMessage, deleteMessage } from './discord';
 import type { LinkSummary } from './types';
 
@@ -32,8 +32,8 @@ interface Row {
   summary: LinkSummary;
 }
 
-async function fetchRows(): Promise<{ rows: Row[]; total: number; notGraded: number }> {
-  const links = await allLinks();
+async function fetchRows(guildId: string): Promise<{ rows: Row[]; total: number; notGraded: number }> {
+  const links = await allLinks(guildId);
   const rows = links.filter((l) => l.summary).map((l) => ({ userId: l.userId, summary: l.summary! }));
   // Tri : parse décroissant, puis or décroissant
   rows.sort((a, b) => b.summary.parseScore - a.summary.parseScore || b.summary.gold - a.summary.gold);
@@ -82,24 +82,20 @@ export function renderBoardPages(rows: Row[], total: number, notGraded: number):
   }));
 }
 
-async function buildPages(): Promise<unknown[]> {
-  const { rows, total, notGraded } = await fetchRows();
+async function buildPages(guildId: string): Promise<unknown[]> {
+  const { rows, total, notGraded } = await fetchRows(guildId);
   return renderBoardPages(rows, total, notGraded);
 }
 
-function existingIds(g: Awaited<ReturnType<typeof getGlobalConfig>>): string[] {
-  return g.boardMessageIds ?? (g.boardMessageId ? [g.boardMessageId] : []);
-}
-
 /** Met à jour le tableau existant (édite/crée/supprime selon le nombre de pages). */
-export async function updateBoard(): Promise<void> {
-  const g = await getGlobalConfig();
+export async function updateBoard(guildId: string): Promise<void> {
+  const g = await getGuildConfig(guildId);
   const channel = g.rosterChannelId || g.boardChannelId;
   if (!channel) return;
-  const existing = existingIds(g);
+  const existing = g.boardMessageIds ?? [];
   if (existing.length === 0) return;
 
-  const pages = await buildPages();
+  const pages = await buildPages(guildId);
   const ids: string[] = [];
   for (let i = 0; i < pages.length; i++) {
     if (i < existing.length) {
@@ -112,18 +108,18 @@ export async function updateBoard(): Promise<void> {
   for (let i = pages.length; i < existing.length; i++) {
     await deleteMessage(channel, existing[i]).catch(() => {});
   }
-  await setBoard(channel, ids);
+  await setBoard(guildId, channel, ids);
 }
 
 /** (Re)poste le tableau dans un salon : supprime l'ancien, crée les nouvelles pages. */
-export async function postBoard(channelId: string): Promise<void> {
-  const g = await getGlobalConfig();
+export async function postBoard(guildId: string, channelId: string): Promise<void> {
+  const g = await getGuildConfig(guildId);
   const oldChannel = g.rosterChannelId || g.boardChannelId;
-  for (const id of existingIds(g)) {
+  for (const id of g.boardMessageIds ?? []) {
     if (oldChannel) await deleteMessage(oldChannel, id).catch(() => {});
   }
-  const pages = await buildPages();
+  const pages = await buildPages(guildId);
   const ids: string[] = [];
   for (const page of pages) ids.push(await createMessage(channelId, { embeds: [page] }));
-  await setBoard(channelId, ids);
+  await setBoard(guildId, channelId, ids);
 }

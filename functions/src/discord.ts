@@ -116,6 +116,18 @@ export async function setRoleColor(guildId: string, roleId: string, hex: string)
   await rest('PATCH', `/guilds/${guildId}/roles/${roleId}`, { color });
 }
 
+/** Crée un rôle sans permission. Sans couleur, il n'influence pas celle du pseudo. */
+export async function createRole(guildId: string, name: string, hex?: string): Promise<DiscordRole> {
+  const res = await rest('POST', `/guilds/${guildId}/roles`, {
+    name,
+    permissions: '0',
+    color: hex ? parseInt(hex.replace('#', ''), 16) : 0,
+    mentionable: false,
+    hoist: false,
+  });
+  return (await res.json()) as DiscordRole;
+}
+
 /** Édite la réponse différée (followup) — token valide 15 min. */
 export async function editOriginalResponse(
   applicationId: string,

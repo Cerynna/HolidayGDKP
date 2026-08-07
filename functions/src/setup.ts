@@ -1,13 +1,17 @@
-// Création automatique des salons GDKP (vérification + roster) et publication.
-import { getGlobalConfig, updateGlobal } from './store';
+// Création automatique des rôles et salons GDKP (vérification + roster) et publication.
+import { getGuildConfig, updateGuildConfig } from './store';
 import {
   createCategory,
   createTextChannel,
   channelExists,
   createMessage,
+  createRole,
   deleteMessage,
+  getGuildRoles,
   type PermissionOverwrite,
 } from './discord';
+import { requiredRoles } from './grades';
+import { config as cfg } from './config';
 import { buildPanelMessage } from './panel';
 import { postBoard } from './board';
 
@@ -32,12 +36,30 @@ async function ensureChannel(
 }
 
 /**
+ * Crée les rôles de grade / finance / statut absents du serveur, en respectant la
+ * casse et la couleur de la config. Les rôles existants ne sont jamais touchés :
+ * un serveur qui a déjà ses propres rôles garde les siens.
+ */
+async function ensureRoles(guildId: string): Promise<string[]> {
+  const existing = new Set((await getGuildRoles(guildId)).map((r) => r.name.toLowerCase()));
+  const created: string[] = [];
+  for (const role of requiredRoles(cfg)) {
+    if (existing.has(role.name.toLowerCase())) continue;
+    await createRole(guildId, role.name, role.color);
+    created.push(role.name);
+  }
+  return created;
+}
+
+/**
  * Crée (ou réutilise) la catégorie + salons vérification & roster, y publie
  * le panneau et le tableau. Renvoie un message récap.
  */
 export async function runSetup(guildId: string, botUserId: string): Promise<string> {
-  const g = await getGlobalConfig();
+  const g = await getGuildConfig(guildId);
   const ow = readOnlyOverwrites(guildId, botUserId);
+
+  const createdRoles = await ensureRoles(guildId);
 
   const categoryId = await ensureChannel(g.categoryId, () => createCategory(guildId, 'GDKP'));
 
@@ -61,15 +83,22 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
   if (g.panelMessageId) await deleteMessage(panelChannelId, g.panelMessageId).catch(() => {});
   const panelMessageId = await createMessage(panelChannelId, buildPanelMessage());
 
-  await updateGlobal({ categoryId, panelChannelId, rosterChannelId, panelMessageId });
+  await updateGuildConfig(guildId, { categoryId, panelChannelId, rosterChannelId, panelMessageId });
 
   // Publie / rafraîchit le tableau.
-  await postBoard(rosterChannelId);
+  await postBoard(guildId, rosterChannelId);
 
   return (
     '✅ **Configuration GDKP prête !**\n' +
     `• Vérification : <#${panelChannelId}>\n` +
     `• Roster : <#${rosterChannelId}>\n` +
-    'Les deux salons sont en lecture seule (seul le bot y écrit). Le tableau se met à jour tout seul.'
+    (createdRoles.length > 0
+      ? `• Rôles créés (${createdRoles.length}) : ${createdRoles.join(', ')}\n`
+      : '• Rôles : tous déjà présents\n') +
+    'Les deux salons sont en lecture seule (seul le bot y écrit). Le tableau se met à jour tout seul.' +
+    (createdRoles.length > 0
+      ? '\n\n⚠️ Vérifie que le rôle du bot est **au-dessus** des rôles créés ' +
+        '(Paramètres du serveur → Rôles), sinon il ne pourra ni les attribuer ni les colorer.'
+      : '')
   );
 }
