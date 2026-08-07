@@ -1,0 +1,20 @@
+# dépendances / build
+node_modules/
+dist/
+functions/lib/
+lib/
+
+# secrets — NE JAMAIS COMMITER
+.env
+.env.local
+serviceAccount*.json
+*serviceAccount*.json
+
+# firebase
+.firebase/
+
+# données locales
+data/links.json
+
+# logs / divers
+*.log

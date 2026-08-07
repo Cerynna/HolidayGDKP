@@ -1,0 +1,29 @@
+{
+  "name": "discord-wow-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord qui attribue des grades selon les perfs Warcraft Logs",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "deploy": "tsx src/deploy-commands.ts",
+    "setup:roles": "tsx src/setup-roles.ts",
+    "build": "tsc",
+    "start:prod": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^14.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

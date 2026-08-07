@@ -1,0 +1,25 @@
+{
+  "classic": true,
+  "region": "eu",
+  "zoneID": 1054,
+  "metric": "averageParse",
+  "syncRoleColors": true,
+  "difficulties": [
+    { "key": "hm", "label": "HM", "id": 4, "minBosses": 6 },
+    { "key": "nm", "label": "NM", "id": 3, "minBosses": 1 }
+  ],
+  "gradePriority": ["hm", "nm"],
+  "raidAccess": {
+    "minParse": 50,
+    "role": "Valid"
+  },
+  "grades": [
+    { "min": 100, "role": "Parfait",    "color": "#E5CC80", "emoji": "🟨" },
+    { "min": 99,  "role": "Prodige",    "color": "#E268A8", "emoji": "🩷" },
+    { "min": 95,  "role": "Légendaire", "color": "#FF8000", "emoji": "🟧" },
+    { "min": 75,  "role": "Épique",     "color": "#A335EE", "emoji": "🟪" },
+    { "min": 50,  "role": "Rare",       "color": "#0070FF", "emoji": "🟦" },
+    { "min": 25,  "role": "Inhabituel", "color": "#1EFF00", "emoji": "🟩" },
+    { "min": 0,   "role": "Commun",     "color": "#666666", "emoji": "⬜" }
+  ]
+}
