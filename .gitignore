@@ -12,3 +12,6 @@ serviceAccount*.json
 
 # logs / divers
 *.log
+
+# ancien build passerelle (supprimé)
+dist/
