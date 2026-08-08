@@ -61,6 +61,7 @@ function buildRankingsQuery(difficulties: Difficulty[], metrics: string[]): stri
   query CharacterRankings($name: String!, $server: String!, $region: String!, $zone: Int) {
     characterData {
       character(name: $name, serverSlug: $server, serverRegion: $region) {
+        id
         name
         classID
 ${fields.join('\n')}
@@ -148,7 +149,9 @@ export async function getCharacterPerformance({
   const metrics = metricsForRole(wclMetric);
   const query = buildRankingsQuery(difficulties, metrics);
   const data = await graphql<{
-    characterData?: { character?: ({ name: string } & Record<string, RawZoneRankings>) | null };
+    characterData?: {
+      character?: ({ id?: number; name: string } & Record<string, RawZoneRankings>) | null;
+    };
   }>(
     query,
     { name, server: slugifyServer(server), region: region.toLowerCase(), zone: zoneID ?? null },
@@ -171,7 +174,100 @@ export async function getCharacterPerformance({
     byKey[d.key] = candidates[0] ?? null;
   }
 
+  // Repli : certains persos ont un classement agrégé (zoneRankings) vide alors que
+  // leurs parses existent bien dans les rapports (métadonnée de classe corrompue côté
+  // WCL, logs non classés, etc.). On recalcule alors depuis les rapports récents.
+  const hasParse = Object.values(byKey).some((p) => p !== null);
+  if (!hasParse && typeof character.id === 'number') {
+    try {
+      const fromReports = await performanceFromReports(character.id, zoneID ?? null, difficulties, classic);
+      if (Object.values(fromReports).some((p) => p !== null)) {
+        return { name: character.name, byKey: fromReports, difficulties };
+      }
+    } catch {
+      // repli indisponible : on garde le résultat vide
+    }
+  }
+
   return { name: character.name, byKey, difficulties };
+}
+
+/**
+ * Recalcule les perfs par difficulté à partir des rapports récents du perso
+ * (meilleur rankPercent par boss), quand le classement agrégé WCL est vide.
+ * Une seule requête : `recentReports(...) { rankings }`.
+ */
+async function performanceFromReports(
+  characterId: number,
+  zoneID: number | null,
+  difficulties: Difficulty[],
+  classic: boolean,
+): Promise<Record<string, DifficultyPerf | null>> {
+  const query = `
+    query CharReports($id: Int!) {
+      characterData {
+        character(id: $id) {
+          recentReports(limit: 8) { data { zone { id } rankings } }
+        }
+      }
+    }`;
+  const data = await graphql<{
+    characterData?: {
+      character?: {
+        recentReports?: {
+          data?: Array<{ zone?: { id: number } | null; rankings: { data?: unknown[] } | null }>;
+        };
+      } | null;
+    };
+  }>(query, { id: characterId }, classic);
+
+  const reports = (data?.characterData?.character?.recentReports?.data ?? []).filter(
+    (r) => zoneID == null || r.zone?.id === zoneID,
+  );
+
+  // difficultyId -> (encounterId -> meilleur rankPercent)
+  const byDiff = new Map<number, Map<number, number>>();
+  for (const rep of reports) {
+    for (const f of (rep.rankings?.data ?? []) as any[]) {
+      const encId: number | undefined = f?.encounter?.id;
+      const diffId: number | undefined = f?.difficulty;
+      if (encId == null || diffId == null) continue;
+      for (const roleKey of Object.keys(f?.roles ?? {})) {
+        for (const c of f.roles[roleKey]?.characters ?? []) {
+          if (c?.id !== characterId || typeof c.rankPercent !== 'number') continue;
+          let m = byDiff.get(diffId);
+          if (!m) {
+            m = new Map<number, number>();
+            byDiff.set(diffId, m);
+          }
+          const prev = m.get(encId);
+          if (prev === undefined || c.rankPercent > prev) m.set(encId, c.rankPercent);
+        }
+      }
+    }
+  }
+
+  const byKey: Record<string, DifficultyPerf | null> = {};
+  for (const d of difficulties) {
+    const m = byDiff.get(d.id);
+    if (!m || m.size === 0) {
+      byKey[d.key] = null;
+      continue;
+    }
+    const vals = [...m.values()];
+    const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+    byKey[d.key] = {
+      metric: 'report',
+      averageParse: round1(avg),
+      bestOverall: round1(Math.max(...vals)),
+      bossesRanked: vals.length,
+      bossesTotal: vals.length,
+      bestPerformanceAverage: round1(avg),
+      medianPerformanceAverage: null,
+      totalKills: null,
+    };
+  }
+  return byKey;
 }
 
 function numOrNull(v: number | null | undefined): number | null {
