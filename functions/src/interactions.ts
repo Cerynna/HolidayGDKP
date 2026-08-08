@@ -9,7 +9,7 @@ import {
   ClaimTakenError,
 } from './store';
 import { enqueue } from './jobs';
-import { normalizeRole, parseGold } from './service';
+import { normalizeRole, parseGold, validateGoldInput } from './service';
 import { InteractionType, InteractionResponseType, EPHEMERAL } from './discord';
 import {
   buildRoleSelectResponse,
@@ -193,9 +193,11 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
 
     case 'link': {
       const perso = getOption(interaction, 'perso')!;
-      const gold = parseGold(getOption(interaction, 'or'));
+      const goldRaw = getOption(interaction, 'or');
+      const goldErr = validateGoldInput(goldRaw);
+      if (goldErr) return ephemeral(goldErr);
       const wclMetric = (getOption(interaction, 'role') ?? 'auto') as WclMetric;
-      return startLink(interaction, perso, gold, wclMetric);
+      return startLink(interaction, perso, parseGold(goldRaw), wclMetric);
     }
 
     case 'grade': {
@@ -347,6 +349,8 @@ async function handleModal(interaction: GuildInteraction): Promise<unknown> {
     if (!link) {
       return ephemeral("ℹ️ Tu n'as pas de perso lié. Clique sur **📝 Postuler** d'abord.");
     }
+    const goldErr = validateGoldInput(fields.gold);
+    if (goldErr) return ephemeral(goldErr);
     await setLink(guildId, userId, { ...link, gold: parseGold(fields.gold) });
     await enqueue({
       kind: 'grade',
@@ -380,6 +384,8 @@ async function handleModal(interaction: GuildInteraction): Promise<unknown> {
 
   // Première inscription
   if (customId.startsWith(LINK_MODAL_PREFIX)) {
+    const goldErr = validateGoldInput(fields.gold);
+    if (goldErr) return ephemeral(goldErr);
     const role = normalizeRole(customId.split(':')[1]);
     return startLink(interaction, fields.name, parseGold(fields.gold), role);
   }
