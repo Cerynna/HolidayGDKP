@@ -116,16 +116,44 @@ export async function setRoleColor(guildId: string, roleId: string, hex: string)
   await rest('PATCH', `/guilds/${guildId}/roles/${roleId}`, { color });
 }
 
-/** Crée un rôle sans permission. Sans couleur, il n'influence pas celle du pseudo. */
-export async function createRole(guildId: string, name: string, hex?: string): Promise<DiscordRole> {
+/** Crée un rôle. Sans couleur ni permission, il n'influence pas la couleur du pseudo. */
+export async function createRole(
+  guildId: string,
+  name: string,
+  opts: { color?: string; permissions?: string; hoist?: boolean } = {},
+): Promise<DiscordRole> {
   const res = await rest('POST', `/guilds/${guildId}/roles`, {
     name,
-    permissions: '0',
-    color: hex ? parseInt(hex.replace('#', ''), 16) : 0,
+    permissions: opts.permissions ?? '0',
+    color: opts.color ? parseInt(opts.color.replace('#', ''), 16) : 0,
     mentionable: false,
-    hoist: false,
+    hoist: opts.hoist ?? false,
   });
   return (await res.json()) as DiscordRole;
+}
+
+// Types de salons Discord
+export const ChannelType = { TEXT: 0, VOICE: 2, CATEGORY: 4, FORUM: 15 } as const;
+
+/** Crée un salon d'un type donné, renvoie son id. */
+export async function createChannel(
+  guildId: string,
+  opts: {
+    name: string;
+    type: number;
+    topic?: string;
+    parentId?: string;
+    overwrites?: PermissionOverwrite[];
+  },
+): Promise<string> {
+  const res = await rest('POST', `/guilds/${guildId}/channels`, {
+    name: opts.name,
+    type: opts.type,
+    topic: opts.topic,
+    parent_id: opts.parentId,
+    permission_overwrites: opts.overwrites,
+  });
+  return ((await res.json()) as { id: string }).id;
 }
 
 export interface MessagePayload {

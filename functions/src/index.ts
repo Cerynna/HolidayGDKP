@@ -9,7 +9,7 @@ if (!getApps().length) initializeApp();
 import { verifyRequest } from './verify';
 import { handleInteraction } from './interactions';
 import { processJob } from './worker';
-import { JOBS_COLLECTION } from './jobs';
+import { enqueue, JOBS_COLLECTION } from './jobs';
 import type { PendingJob } from './types';
 
 const DISCORD_PUBLIC_KEY = defineSecret('DISCORD_PUBLIC_KEY');
@@ -33,6 +33,30 @@ export const interactions = onRequest(
     }
 
     const body = JSON.parse(raw.toString('utf8'));
+
+    // --- Webhook Events (auto-setup à l'arrivée sur un serveur) ---
+    // PING des webhook events (type 0) : accuse réception.
+    if (body.type === 0) {
+      res.status(204).end();
+      return;
+    }
+    // Événement (type 1 avec `event`) : APPLICATION_AUTHORIZED = bot ajouté à une guilde.
+    if (body.type === 1 && body.event) {
+      const ev = body.event;
+      if (ev.type === 'APPLICATION_AUTHORIZED' && ev.data?.guild?.id) {
+        await enqueue({
+          kind: 'setup',
+          applicationId: body.application_id,
+          token: 'auto',
+          guildId: ev.data.guild.id,
+          userId: ev.data.user?.id ?? '',
+        }).catch(() => {});
+      }
+      res.status(204).end();
+      return;
+    }
+
+    // --- Interactions ---
     if (body.type === 1) {
       res.json({ type: 1 }); // PONG
       return;

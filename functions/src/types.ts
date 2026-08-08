@@ -84,6 +84,12 @@ export interface GuildConfig {
   panelChannelId?: string;
   panelMessageId?: string;
   rosterChannelId?: string;
+  annonceChannelId?: string;
+  eventsChannelId?: string;
+  raidVoiceId?: string;
+  debriefVoiceId?: string;
+  orgaChannelId?: string;
+  organisationRoleId?: string;
 }
 
 export interface DifficultyPerf {

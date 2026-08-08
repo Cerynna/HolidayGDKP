@@ -58,5 +58,7 @@ export async function processJob(job: PendingJob): Promise<void> {
   } catch (e) {
     payload = { content: `⚠️ Erreur : ${(e as Error).message}` };
   }
-  await editOriginalResponse(job.applicationId, job.token, payload);
+  // Auto-setup (arrivée sur un serveur) : pas d'interaction à éditer.
+  if (job.token === 'auto') return;
+  await editOriginalResponse(job.applicationId, job.token, payload).catch(() => {});
 }
