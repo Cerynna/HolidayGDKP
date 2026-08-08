@@ -111,7 +111,9 @@ async function ensureRoles(guildId: string): Promise<string[]> {
     const isParseGrade = Boolean(role.color);
     const existing = byName.get(role.name.toLowerCase());
     if (existing) {
-      if (isParseGrade) await setRoleHoist(guildId, existing.id, true).catch(() => {});
+      // Seuls les grades de parse sont hoistés ; les autres (finance, Valid, Caddie)
+      // sont explicitement dé-hoistés pour un regroupement propre par parse.
+      await setRoleHoist(guildId, existing.id, isParseGrade).catch(() => {});
       continue;
     }
     await createRole(guildId, role.name, { color: role.color, hoist: isParseGrade });
