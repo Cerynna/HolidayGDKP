@@ -60,6 +60,30 @@ export function parseGold(input: string | null | undefined): number {
   return Math.round(n);
 }
 
+/**
+ * Valide une saisie d'or avant enregistrement. Renvoie un message d'erreur si le
+ * montant est ambigu (ex: "200" qui veut presque sûrement dire 200k dans un GDKP),
+ * sinon null. Un champ vide vaut 0 (accepté). On exige soit un suffixe k/m, soit un
+ * montant complet (>= 1000) : un nombre nu à 1-3 chiffres est un "k" oublié.
+ */
+export function validateGoldInput(input: string | null | undefined): string | null {
+  if (!input) return null; // vide = 0
+  const s = input.toLowerCase().replace(/\s|po|g/g, '').replace(',', '.').trim();
+  if (s === '') return null;
+  const m = s.match(/^([0-9]*\.?[0-9]+)\s*(k|m)?$/);
+  if (!m) return "❌ Montant d'or invalide. Écris par ex. **200k** ou **200000**.";
+  const suffix = m[2];
+  const n = parseFloat(m[1]);
+  if (!suffix && n > 0 && n < 1000) {
+    const full = Math.round(n * 1000);
+    return (
+      `❓ **${m[1]}** est ambigu : dans un GDKP tu voulais sûrement dire **${m[1]}k**.\n` +
+      `Ré-indique ton or avec un **k** (ex : \`${m[1]}k\`) ou en entier (ex : \`${full}\`).`
+    );
+  }
+  return null;
+}
+
 function fmt(v: number | null | undefined): string {
   return v === null || v === undefined ? '—' : v.toFixed(1);
 }
