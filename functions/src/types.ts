@@ -85,6 +85,7 @@ export interface GuildConfig {
   panelMessageId?: string;
   rosterChannelId?: string;
   annonceChannelId?: string;
+  reportsChannelId?: string;
   eventsChannelId?: string;
   raidVoiceId?: string;
   debriefVoiceId?: string;

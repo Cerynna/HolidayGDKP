@@ -200,6 +200,14 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
       overwrites: announceOverwrites(guildId, botUserId, orgaRoleId),
     }),
   );
+  const reportsChannelId = await ensureChannel(g.reportsChannelId, () =>
+    createChannel(guildId, {
+      name: '💰・rapports-de-raid',
+      type: ChannelType.TEXT,
+      topic: 'Répartition du pot GDKP — les organisateurs lancent /rapport ici',
+      overwrites: announceOverwrites(guildId, botUserId, orgaRoleId),
+    }),
+  );
   const orgaChannelId = await ensureChannel(g.orgaChannelId, () =>
     createChannel(guildId, {
       name: '🔒・organisation',
@@ -238,6 +246,7 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
   // Réapplique les permissions (corrige aussi les salons déjà existants).
   await setChannelOverwrites(rosterChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
   await setChannelOverwrites(annonceChannelId, announceOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
+  await setChannelOverwrites(reportsChannelId, announceOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
   await setChannelOverwrites(orgaChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
   await setChannelOverwrites(raidVoiceId, raidOw).catch(() => {});
   await setChannelOverwrites(debriefVoiceId, eligibleOw).catch(() => {});
@@ -247,6 +256,7 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
     panelChannelId,
     rosterChannelId,
     annonceChannelId,
+    reportsChannelId,
     orgaChannelId,
     raidVoiceId,
     debriefVoiceId,
@@ -262,6 +272,7 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
     `• Vérification : <#${panelChannelId}>`,
     `• Roster : <#${rosterChannelId}>`,
     `• Annonces : <#${annonceChannelId}>`,
+    `• Rapports de raid : <#${reportsChannelId}>`,
     `• Organisation (privé) : <#${orgaChannelId}>`,
     eventsChannelId ? `• Events : <#${eventsChannelId}>` : null,
     `• Vocaux : 🔥 Raid · 📈 Debrief`,
