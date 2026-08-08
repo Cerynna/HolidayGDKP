@@ -113,7 +113,7 @@ export interface ResolvedGrade {
 
 /** Job asynchrone déposé dans Firestore et traité par le worker. */
 export interface PendingJob {
-  kind: 'link' | 'grade' | 'refresh' | 'board' | 'refreshBoard' | 'setup' | 'panel';
+  kind: 'link' | 'grade' | 'refresh' | 'board' | 'refreshBoard' | 'setup' | 'panel' | 'report';
   applicationId: string;
   token: string; // token d'interaction (valide 15 min)
   guildId: string;
@@ -124,5 +124,6 @@ export interface PendingJob {
   wclMetric?: WclMetric;
   targetUserId?: string; // pour /grade sur un autre membre
   channelId?: string; // salon d'origine, pour /tableau et /panneau
+  reportUrl?: string; // pour /rapport
   createdAt?: number;
 }
