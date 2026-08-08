@@ -1,0 +1,37 @@
+name: CI
+
+# Vérifie que le code compile sur chaque Pull Request vers main
+# (et sur les push de branches de travail). Ne déploie rien.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main] # main est couvert par le workflow de déploiement
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+        working-directory: functions
+
+      - name: Vérification des types (tsc --noEmit)
+        run: npm run typecheck
+        working-directory: functions
+
+      - name: Compilation
+        run: npm run build
+        working-directory: functions
