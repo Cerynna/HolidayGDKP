@@ -228,6 +228,14 @@ export async function createCategory(guildId: string, name: string): Promise<str
   return ch.id;
 }
 
+/** Remplace les permissions d'un salon existant (idempotent). */
+export async function setChannelOverwrites(
+  channelId: string,
+  overwrites: PermissionOverwrite[],
+): Promise<void> {
+  await rest('PATCH', `/channels/${channelId}`, { permission_overwrites: overwrites });
+}
+
 /** Vérifie si un salon existe encore. */
 export async function channelExists(channelId: string): Promise<boolean> {
   const r = await fetch(`${API}/channels/${channelId}`, { headers: authHeaders() });

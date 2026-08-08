@@ -4,6 +4,7 @@ import {
   createChannel,
   ChannelType,
   channelExists,
+  setChannelOverwrites,
   createMessage,
   createRole,
   editMessage,
@@ -44,6 +45,22 @@ function orgaOnlyOverwrites(guildId: string, botUserId: string, orgaRoleId: stri
     { id: orgaRoleId, type: 0, allow: String(VIEW | SEND | EMBED) },
     { id: botUserId, type: 1, allow: String(VIEW | SEND | EMBED) },
   ];
+}
+
+/** Events : visible seulement pour les raideurs éligibles (Valid + Caddie). */
+function eventsOverwrites(
+  guildId: string,
+  botUserId: string,
+  roleIds: Array<string | undefined>,
+): PermissionOverwrite[] {
+  const ow: PermissionOverwrite[] = [
+    { id: guildId, type: 0, deny: String(VIEW) }, // @everyone : invisible
+    { id: botUserId, type: 1, allow: String(VIEW | SEND | EMBED) },
+  ];
+  for (const id of roleIds) {
+    if (id) ow.push({ id, type: 0, allow: String(VIEW | SEND) });
+  }
+  return ow;
 }
 
 async function ensureChannel(
@@ -116,6 +133,12 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
   const createdRoles = await ensureRoles(guildId);
   const orgaRoleId = await ensureOrganisationRole(guildId);
 
+  // IDs des rôles d'éligibilité (pour le forum des events).
+  const roleId = new Map((await getGuildRoles(guildId)).map((r) => [r.name.toLowerCase(), r.id]));
+  const validRoleId = cfg.raidAccess ? roleId.get(cfg.raidAccess.role.toLowerCase()) : undefined;
+  const caddieRoleId = roleId.get(cfg.caddie.role.toLowerCase());
+  const eventsOw = eventsOverwrites(guildId, botUserId, [validRoleId, caddieRoleId]);
+
   // Salons texte (sans catégorie)
   const panelChannelId = await ensureChannel(g.panelChannelId, () =>
     createChannel(guildId, {
@@ -129,8 +152,8 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
     createChannel(guildId, {
       name: '🏆・roster',
       type: ChannelType.TEXT,
-      topic: 'Roster GDKP — mis à jour automatiquement',
-      overwrites: readOnly,
+      topic: 'Roster GDKP — réservé aux organisateurs',
+      overwrites: orgaOnlyOverwrites(guildId, botUserId, orgaRoleId),
     }),
   );
   const annonceChannelId = await ensureChannel(g.annonceChannelId, () =>
@@ -166,6 +189,7 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
       eventsChannelId = await createChannel(guildId, {
         name: '📅・les-events',
         type: ChannelType.FORUM,
+        overwrites: eventsOw,
       });
     } catch {
       eventsChannelId = undefined;
@@ -174,6 +198,12 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
         '**Communauté** sur le serveur (Paramètres → Activer la communauté), puis relance `/setup`.';
     }
   }
+
+  // Réapplique les permissions (corrige aussi les salons déjà existants).
+  await setChannelOverwrites(rosterChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
+  await setChannelOverwrites(annonceChannelId, announceOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
+  await setChannelOverwrites(orgaChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
+  if (eventsChannelId) await setChannelOverwrites(eventsChannelId, eventsOw).catch(() => {});
 
   await updateGuildConfig(guildId, {
     panelChannelId,
