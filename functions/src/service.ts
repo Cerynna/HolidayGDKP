@@ -4,10 +4,11 @@ import {
   getLink,
   setLink,
   allLinks,
+  removeLink,
   getRealm,
   getReport,
   saveReport,
-  addReportExclusion,
+  toggleReportExclusion,
 } from './store';
 import { fmtGold } from './format';
 import { buildReportButtons } from './panel';
@@ -255,7 +256,9 @@ export async function runRefresh(guildId: string): Promise<MessagePayload> {
   for (const link of links) {
     const member = await getMember(guildId, link.userId);
     if (!member) {
-      lines.push(`⚪ <@${link.userId}> — plus sur le serveur`);
+      // Membre parti du serveur : on retire son lien du roster.
+      await removeLink(guildId, link.userId).catch(() => {});
+      lines.push(`🗑️ <@${link.userId}> — parti, retiré du roster`);
       continue;
     }
     try {
@@ -286,6 +289,34 @@ export async function runRefresh(guildId: string): Promise<MessagePayload> {
   return { content: truncate(header + lines.join('\n'), 1900) };
 }
 
+/** /unlink : retire les rôles attribués par le bot + réinitialise le pseudo. */
+export async function runUnlink(guildId: string, userId: string): Promise<void> {
+  const member = await getMember(guildId, userId);
+  if (!member) {
+    await updateBoard(guildId).catch(() => {});
+    return;
+  }
+
+  const roles = await getGuildRoles(guildId);
+  const botRoleNames = new Set<string>([
+    ...allGradeRoleNames(cfg),
+    ...allFinanceRoleNames(cfg),
+    ...allStatusRoleNames(cfg),
+  ]);
+  for (const rid of member.roles) {
+    const r = roles.find((x) => x.id === rid);
+    if (r && botRoleNames.has(r.name.toLowerCase())) {
+      await removeMemberRole(guildId, userId, rid).catch(() => {});
+    }
+  }
+
+  // Réinitialise le pseudo (retire le préfixe [parse - emoji]).
+  const base = baseName(member.nick, member.globalName, member.username);
+  await setNickname(guildId, userId, base).catch(() => {});
+
+  await updateBoard(guildId).catch(() => {});
+}
+
 /** Emoji du grade de parse correspondant à un score. */
 function parseEmojiFor(score: number): string {
   const table = Array.isArray(cfg.grades) ? cfg.grades : Object.values(cfg.grades).flat();
@@ -312,14 +343,13 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
     };
   }
 
-  // Exclusion demandée (pour CE rapport) enregistrée avant la lecture.
-  if (opts.excludeName) await addReportExclusion(guildId, code, opts.excludeName);
+  // Bascule l'exclusion demandée (exclut si absent, réintègre si déjà exclu).
+  if (opts.excludeName) await toggleReportExclusion(guildId, code, opts.excludeName);
 
   const saved = await getReport(guildId, code);
   const pot = opts.pot ?? saved?.pot ?? 0;
   const partsOpt = opts.parts ?? saved?.parts; // override éventuel du nombre de parts
   const excluded = new Set((saved?.excluded ?? []).map((s) => s.toLowerCase()));
-  if (opts.excludeName) excluded.add(opts.excludeName.toLowerCase());
 
   const report = await getReportTop(code, cfg.classic ?? false);
 

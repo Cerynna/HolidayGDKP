@@ -1,15 +1,21 @@
 // Traitement asynchrone d'un job : WCL + rôles, puis édition de la réponse différée.
 import { setLink } from './store';
-import { runGrade, runRefresh, runReport } from './service';
+import { runGrade, runRefresh, runReport, runUnlink } from './service';
 import { postBoard, updateBoard } from './board';
 import { runSetup, refreshPanel } from './setup';
 import { editOriginalResponse, editMessage, type MessagePayload } from './discord';
 import type { PendingJob } from './types';
 
 export async function processJob(job: PendingJob): Promise<void> {
-  // Rafraîchissement silencieux du tableau (ex: après /unlink) — pas de réponse à éditer.
+  // Rafraîchissement silencieux du tableau — pas de réponse à éditer.
   if (job.kind === 'refreshBoard') {
     await updateBoard(job.guildId).catch(() => {});
+    return;
+  }
+
+  // /unlink : nettoyage en arrière-plan (rôles + pseudo + tableau), réponse déjà envoyée.
+  if (job.kind === 'unlink') {
+    await runUnlink(job.guildId, job.userId).catch(() => {});
     return;
   }
 
@@ -37,7 +43,9 @@ export async function processJob(job: PendingJob): Promise<void> {
       if (job.messageId && job.channelId) {
         // Recalcul / exclusion : édite le message du Top en place, ack éphémère.
         await editMessage(job.channelId, job.messageId, reportPayload);
-        payload = { content: job.excludeName ? '✅ Top recalculé (joueur exclu).' : '✅ Top recalculé.' };
+        payload = {
+          content: job.excludeName ? '✅ Top recalculé (exclusion mise à jour).' : '✅ Top recalculé.',
+        };
       } else {
         payload = reportPayload;
       }

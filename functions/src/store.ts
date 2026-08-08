@@ -84,10 +84,22 @@ export async function saveReport(
   await reportsCol(guildId).doc(code).set(patch, { merge: true });
 }
 
-export async function addReportExclusion(guildId: string, code: string, name: string): Promise<void> {
-  await reportsCol(guildId)
-    .doc(code)
-    .set({ excluded: FieldValue.arrayUnion(name.toLowerCase()) }, { merge: true });
+/** Bascule l'exclusion d'un joueur pour ce rapport. Renvoie true s'il est désormais exclu. */
+export async function toggleReportExclusion(
+  guildId: string,
+  code: string,
+  name: string,
+): Promise<boolean> {
+  const key = name.trim().toLowerCase();
+  const ref = reportsCol(guildId).doc(code);
+  const snap = await ref.get();
+  const excluded = (snap.exists ? (snap.data() as GuildReport).excluded : []) ?? [];
+  const isExcluded = excluded.map((s) => s.toLowerCase()).includes(key);
+  await ref.set(
+    { excluded: isExcluded ? FieldValue.arrayRemove(key) : FieldValue.arrayUnion(key) },
+    { merge: true },
+  );
+  return !isExcluded;
 }
 
 // --- Liens ---

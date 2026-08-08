@@ -175,16 +175,20 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
     case 'unlink': {
       const existed = await removeLink(guildId, userId);
       if (existed) {
-        // Rafraîchit le tableau en arrière-plan (perso retiré).
+        // Arrière-plan : retire les rôles du bot, réinitialise le pseudo, rafraîchit le tableau.
         await enqueue({
-          kind: 'refreshBoard',
+          kind: 'unlink',
           applicationId: interaction.application_id,
           token: interaction.token,
           guildId,
           userId,
         });
       }
-      return ephemeral(existed ? '✅ Lien supprimé (perso libéré).' : "ℹ️ Tu n'avais aucun perso lié.");
+      return ephemeral(
+        existed
+          ? '✅ Lien supprimé (perso libéré, rôles retirés et pseudo réinitialisé).'
+          : "ℹ️ Tu n'avais aucun perso lié.",
+      );
     }
 
     case 'link': {

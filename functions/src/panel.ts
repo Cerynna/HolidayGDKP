@@ -209,7 +209,7 @@ export function buildReportButtons(code: string, pot: number, withExclude = true
     buttons.push({
       type: ComponentType.BUTTON,
       style: 4, // danger (rouge)
-      label: '🚫 Exclure un joueur',
+      label: '🚫 Exclure / réintégrer',
       custom_id: `${RPT_EXCLUDE_PREFIX}:${code}:${pot}`,
     });
   }
@@ -227,7 +227,7 @@ export function buildExcludeModalResponse(
     type: InteractionResponseType.MODAL,
     data: {
       custom_id: `${RPT_EXCLUDE_MODAL_PREFIX}:${code}:${pot}:${channelId}:${messageId}`,
-      title: 'Exclure un joueur du Top',
+      title: 'Exclure / réintégrer un joueur',
       components: [
         {
           type: ComponentType.ACTION_ROW,
@@ -235,7 +235,7 @@ export function buildExcludeModalResponse(
             {
               type: ComponentType.TEXT_INPUT,
               custom_id: 'name',
-              label: 'Nom du perso à exclure',
+              label: 'Nom du perso (bascule exclu/réintégré)',
               style: 1,
               required: true,
               placeholder: 'ex : Bizoutein',

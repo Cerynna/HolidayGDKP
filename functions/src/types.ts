@@ -119,7 +119,16 @@ export interface ResolvedGrade {
 
 /** Job asynchrone déposé dans Firestore et traité par le worker. */
 export interface PendingJob {
-  kind: 'link' | 'grade' | 'refresh' | 'board' | 'refreshBoard' | 'setup' | 'panel' | 'report';
+  kind:
+    | 'link'
+    | 'grade'
+    | 'refresh'
+    | 'board'
+    | 'refreshBoard'
+    | 'setup'
+    | 'panel'
+    | 'report'
+    | 'unlink';
   applicationId: string;
   token: string; // token d'interaction (valide 15 min)
   guildId: string;
