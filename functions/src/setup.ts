@@ -16,10 +16,16 @@ import { config as cfg } from './config';
 import { buildPanelMessage } from './panel';
 import { postBoard } from './board';
 
-const VIEW = 1024;
-const SEND = 2048;
-const EMBED = 16384;
-const ADMINISTRATOR = 8;
+// Permissions Discord (BigInt : certains bits dépassent 2^31).
+const VIEW = 1n << 10n; // Voir le salon
+const SEND = 1n << 11n; // Envoyer des messages
+const EMBED = 1n << 14n; // Intégrer des liens
+const CONNECT = 1n << 20n; // Se connecter (vocal)
+const SPEAK = 1n << 21n; // Parler
+const USE_VAD = 1n << 25n; // Détection de voix (refusé = push-to-talk forcé)
+const USE_SOUNDBOARD = 1n << 42n; // Soundboard
+const USE_EXTERNAL_SOUNDS = 1n << 45n; // Sons externes
+const ADMINISTRATOR = 1n << 3n; // 8
 
 /** Salon en lecture seule : membres voient mais n'écrivent pas ; le bot écrit. */
 function readOnlyOverwrites(guildId: string, botUserId: string): PermissionOverwrite[] {
@@ -47,18 +53,38 @@ function orgaOnlyOverwrites(guildId: string, botUserId: string, orgaRoleId: stri
   ];
 }
 
-/** Events : visible seulement pour les raideurs éligibles (Valid + Caddie). */
-function eventsOverwrites(
+/** Réservé aux raideurs éligibles (Valid + Caddie) : events + vocaux. */
+function eligibleOverwrites(
   guildId: string,
   botUserId: string,
   roleIds: Array<string | undefined>,
 ): PermissionOverwrite[] {
   const ow: PermissionOverwrite[] = [
-    { id: guildId, type: 0, deny: String(VIEW) }, // @everyone : invisible
-    { id: botUserId, type: 1, allow: String(VIEW | SEND | EMBED) },
+    { id: guildId, type: 0, deny: String(VIEW | CONNECT) }, // @everyone : invisible + pas de connexion
+    { id: botUserId, type: 1, allow: String(VIEW | SEND | EMBED | CONNECT) },
   ];
   for (const id of roleIds) {
-    if (id) ow.push({ id, type: 0, allow: String(VIEW | SEND) });
+    if (id) ow.push({ id, type: 0, allow: String(VIEW | SEND | CONNECT) });
+  }
+  return ow;
+}
+
+/** Vocal du raid : réservé Valid/Caddie, push-to-talk forcé + soundboard interdit ;
+ * les organisateurs sont exemptés (voix libre + soundboard). */
+function raidVoiceOverwrites(
+  guildId: string,
+  botUserId: string,
+  orgaRoleId: string,
+  roleIds: Array<string | undefined>,
+): PermissionOverwrite[] {
+  const denyEligible = String(USE_VAD | USE_SOUNDBOARD | USE_EXTERNAL_SOUNDS);
+  const ow: PermissionOverwrite[] = [
+    { id: guildId, type: 0, deny: String(VIEW | CONNECT) },
+    { id: botUserId, type: 1, allow: String(VIEW | CONNECT) },
+    { id: orgaRoleId, type: 0, allow: String(VIEW | CONNECT | SPEAK | USE_VAD | USE_SOUNDBOARD) },
+  ];
+  for (const id of roleIds) {
+    if (id) ow.push({ id, type: 0, allow: String(VIEW | CONNECT | SPEAK), deny: denyEligible });
   }
   return ow;
 }
@@ -137,7 +163,8 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
   const roleId = new Map((await getGuildRoles(guildId)).map((r) => [r.name.toLowerCase(), r.id]));
   const validRoleId = cfg.raidAccess ? roleId.get(cfg.raidAccess.role.toLowerCase()) : undefined;
   const caddieRoleId = roleId.get(cfg.caddie.role.toLowerCase());
-  const eventsOw = eventsOverwrites(guildId, botUserId, [validRoleId, caddieRoleId]);
+  const eligibleOw = eligibleOverwrites(guildId, botUserId, [validRoleId, caddieRoleId]);
+  const raidOw = raidVoiceOverwrites(guildId, botUserId, orgaRoleId, [validRoleId, caddieRoleId]);
 
   // Salons texte (sans catégorie)
   const panelChannelId = await ensureChannel(g.panelChannelId, () =>
@@ -173,12 +200,12 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
     }),
   );
 
-  // Salons vocaux
+  // Salons vocaux (réservés Valid + Caddie)
   const raidVoiceId = await ensureChannel(g.raidVoiceId, () =>
-    createChannel(guildId, { name: '🔥 Raid', type: ChannelType.VOICE }),
+    createChannel(guildId, { name: '🔥 Raid', type: ChannelType.VOICE, overwrites: raidOw }),
   );
   const debriefVoiceId = await ensureChannel(g.debriefVoiceId, () =>
-    createChannel(guildId, { name: '📈 Debrief', type: ChannelType.VOICE }),
+    createChannel(guildId, { name: '📈 Debrief', type: ChannelType.VOICE, overwrites: eligibleOw }),
   );
 
   // Forum (nécessite un serveur Communauté) — échec non bloquant.
@@ -189,7 +216,7 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
       eventsChannelId = await createChannel(guildId, {
         name: '📅・les-events',
         type: ChannelType.FORUM,
-        overwrites: eventsOw,
+        overwrites: eligibleOw,
       });
     } catch {
       eventsChannelId = undefined;
@@ -203,7 +230,9 @@ export async function runSetup(guildId: string, botUserId: string): Promise<stri
   await setChannelOverwrites(rosterChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
   await setChannelOverwrites(annonceChannelId, announceOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
   await setChannelOverwrites(orgaChannelId, orgaOnlyOverwrites(guildId, botUserId, orgaRoleId)).catch(() => {});
-  if (eventsChannelId) await setChannelOverwrites(eventsChannelId, eventsOw).catch(() => {});
+  await setChannelOverwrites(raidVoiceId, raidOw).catch(() => {});
+  await setChannelOverwrites(debriefVoiceId, eligibleOw).catch(() => {});
+  if (eventsChannelId) await setChannelOverwrites(eventsChannelId, eligibleOw).catch(() => {});
 
   await updateGuildConfig(guildId, {
     panelChannelId,
