@@ -1,13 +1,14 @@
 // Persistance Firestore scopée par guilde : liens, réclamations de perso, config.
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { slugifyServer } from './warcraftlogs';
 import { config as cfg } from './config';
-import type { Link, GuildConfig } from './types';
+import type { Link, GuildConfig, GuildReport } from './types';
 
 const GUILDS = 'guilds';
 const LINKS = 'links';
 const CLAIMS = 'claims';
+const REPORTS = 'reports';
 
 function db(): Firestore {
   if (!getApps().length) initializeApp();
@@ -63,6 +64,30 @@ export async function setBoard(
   messageIds: string[],
 ): Promise<void> {
   await updateGuildConfig(guildId, { boardChannelId: channelId, boardMessageIds: messageIds });
+}
+
+// --- Rapports traités ---
+function reportsCol(guildId: string) {
+  return guildDoc(guildId).collection(REPORTS);
+}
+
+export async function getReport(guildId: string, code: string): Promise<GuildReport | null> {
+  const snap = await reportsCol(guildId).doc(code).get();
+  return snap.exists ? (snap.data() as GuildReport) : null;
+}
+
+export async function saveReport(
+  guildId: string,
+  code: string,
+  patch: GuildReport,
+): Promise<void> {
+  await reportsCol(guildId).doc(code).set(patch, { merge: true });
+}
+
+export async function addReportExclusion(guildId: string, code: string, name: string): Promise<void> {
+  await reportsCol(guildId)
+    .doc(code)
+    .set({ excluded: FieldValue.arrayUnion(name.toLowerCase()) }, { merge: true });
 }
 
 // --- Liens ---

@@ -123,7 +123,17 @@ export interface PendingJob {
   gold?: number;
   wclMetric?: WclMetric;
   targetUserId?: string; // pour /grade sur un autre membre
-  channelId?: string; // salon d'origine, pour /tableau et /panneau
+  channelId?: string; // salon d'origine, pour /tableau et /panneau (et édition de message)
   reportUrl?: string; // pour /rapport
+  pot?: number; // montant total du pot (PO), pour /rapport
+  excludeName?: string; // perso à exclure du Top (pour ce rapport)
+  messageId?: string; // message à éditer (recalcul/exclusion sur un message existant)
   createdAt?: number;
+}
+
+/** Rapport de raid déjà traité (Firestore guilds/{g}/reports/{code}). */
+export interface GuildReport {
+  processedAt?: number;
+  pot?: number;
+  excluded?: string[]; // noms de perso exclus du Top (minuscules), pour CE rapport
 }

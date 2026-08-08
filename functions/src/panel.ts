@@ -8,6 +8,10 @@ export const REEVAL_BUTTON_ID = 'wow_reeval_button';
 export const ROLE_SELECT_ID = 'wow_role_select';
 export const LINK_MODAL_PREFIX = 'wow_link_modal';
 export const REEVAL_MODAL_ID = 'wow_reeval_modal';
+// Rapport : custom_id encodent `prefix:code:pot(:channel:message)`
+export const RPT_RECALC_PREFIX = 'rpt_recalc';
+export const RPT_EXCLUDE_PREFIX = 'rpt_excl';
+export const RPT_EXCLUDE_MODAL_PREFIX = 'rpt_exclm';
 
 function allGrades(): Grade[] {
   return Array.isArray(cfg.grades) ? cfg.grades : Object.values(cfg.grades).flat();
@@ -181,6 +185,60 @@ export function buildReevalModalResponse(currentGoldText: string): unknown {
               required: true,
               value: currentGoldText,
               placeholder: 'ex : 150k',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// --- Composants du /rapport ---
+
+/** Boutons sous un Top 10 : Recalculer + Exclure (code et pot encodés). */
+export function buildReportButtons(code: string, pot: number, withExclude = true): unknown[] {
+  const buttons: unknown[] = [
+    {
+      type: ComponentType.BUTTON,
+      style: 2, // secondary
+      label: '🔄 Recalculer',
+      custom_id: `${RPT_RECALC_PREFIX}:${code}:${pot}`,
+    },
+  ];
+  if (withExclude) {
+    buttons.push({
+      type: ComponentType.BUTTON,
+      style: 4, // danger (rouge)
+      label: '🚫 Exclure un joueur',
+      custom_id: `${RPT_EXCLUDE_PREFIX}:${code}:${pot}`,
+    });
+  }
+  return [{ type: ComponentType.ACTION_ROW, components: buttons }];
+}
+
+/** Modal de saisie du perso à exclure (contexte encodé dans le custom_id). */
+export function buildExcludeModalResponse(
+  code: string,
+  pot: number,
+  channelId: string,
+  messageId: string,
+): unknown {
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `${RPT_EXCLUDE_MODAL_PREFIX}:${code}:${pot}:${channelId}:${messageId}`,
+      title: 'Exclure un joueur du Top',
+      components: [
+        {
+          type: ComponentType.ACTION_ROW,
+          components: [
+            {
+              type: ComponentType.TEXT_INPUT,
+              custom_id: 'name',
+              label: 'Nom du perso à exclure',
+              style: 1,
+              required: true,
+              placeholder: 'ex : Bizoutein',
             },
           ],
         },

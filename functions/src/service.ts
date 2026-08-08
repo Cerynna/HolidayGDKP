@@ -1,6 +1,16 @@
 // Orchestration métier (worker) : WCL -> grade parse + finance + statut -> rôles + pseudo + tableau.
 import { config as cfg } from './config';
-import { getLink, setLink, allLinks, getRealm } from './store';
+import {
+  getLink,
+  setLink,
+  allLinks,
+  getRealm,
+  getReport,
+  saveReport,
+  addReportExclusion,
+} from './store';
+import { fmtGold } from './format';
+import { buildReportButtons } from './panel';
 import {
   getCharacterPerformance,
   slugifyServer,
@@ -285,48 +295,92 @@ function parseEmojiFor(score: number): string {
 
 const REPORT_ROLE_EMOJI = { tank: '🛡️', heal: '💚', dps: '⚔️' } as const;
 
-/** /rapport : met à jour tout le roster + sort le Top 10 du raid depuis un lien WCL. */
-export async function runReport(guildId: string, reportUrl: string): Promise<MessagePayload> {
-  const code = extractReportCode(reportUrl);
+export interface ReportOptions {
+  reportUrl?: string;
+  pot?: number;
+  excludeName?: string;
+}
+
+/** /rapport : refresh du roster + Top 10 (bonus, mentions Discord, exclusions). */
+export async function runReport(guildId: string, opts: ReportOptions): Promise<MessagePayload> {
+  const code = extractReportCode(opts.reportUrl ?? '');
   if (!code) {
     return {
       content:
-        '❌ Lien de rapport invalide. Exemple :\n`https://classic.warcraftlogs.com/reports/aBcD1234efGh`',
+        '❌ Lien de rapport invalide. Exemple :\n`https://fr.classic.warcraftlogs.com/reports/aBcD1234efGh`',
     };
   }
+
+  // Exclusion demandée (pour CE rapport) enregistrée avant la lecture.
+  if (opts.excludeName) await addReportExclusion(guildId, code, opts.excludeName);
+
+  const saved = await getReport(guildId, code);
+  const pot = opts.pot ?? saved?.pot ?? 0;
+  const excluded = new Set((saved?.excluded ?? []).map((s) => s.toLowerCase()));
+  if (opts.excludeName) excluded.add(opts.excludeName.toLowerCase());
 
   const report = await getReportTop(code, cfg.classic ?? false);
 
   // Met à jour tout le roster déjà en base (grades, rôles, pseudos, tableau).
   await runRefresh(guildId).catch(() => {});
 
+  // Classement pas encore prêt (raid trop récent) : bouton pour réessayer.
+  if (report.players.length === 0) {
+    await saveReport(guildId, code, { pot });
+    return {
+      content:
+        '⏳ **Classement pas encore disponible** pour ce rapport (le raid est peut-être trop récent). ' +
+        'Réessaie dans quelques minutes avec le bouton ci-dessous.',
+      components: buildReportButtons(code, pot, false),
+    };
+  }
+
+  const eligible = report.players.filter((p) => !excluded.has(p.name.toLowerCase()));
+  const top = eligible.slice(0, 10);
+
+  // Mentions Discord : nom de perso -> userId lié.
+  const links = await allLinks(guildId);
+  const byChar = new Map<string, string>();
+  for (const l of links) {
+    if (l.name) byChar.set(l.name.toLowerCase(), l.userId);
+    if (l.summary?.char) byChar.set(l.summary.char.toLowerCase(), l.userId);
+  }
+
+  // Bonus = 10 % du pot, réparti en parts égales entre le Top.
+  const bonusPool = Math.round(pot * 0.1);
+  const bonusPer = top.length ? Math.floor(bonusPool / top.length) : 0;
+
   const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
   const medals = ['🥇', '🥈', '🥉'];
-  const top = report.players.slice(0, 10);
+  const lines = top.map((p, i) => {
+    const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
+    const link = p.server
+      ? `[**${p.name}**](https://${host}/character/${cfg.region}/${slugifyServer(p.server)}/${encodeURIComponent(p.name)})`
+      : `**${p.name}**`;
+    const uid = byChar.get(p.name.toLowerCase());
+    const mention = uid ? ` <@${uid}>` : '';
+    const bonus = pot > 0 ? ` · 💰 +${fmtGold(bonusPer)}` : '';
+    return `${rank} ${REPORT_ROLE_EMOJI[p.role]} ${link}${mention} — ${parseEmojiFor(p.avgParse)} ${p.avgParse}%${bonus}`;
+  });
 
-  const lines = top.length
-    ? top.map((p, i) => {
-        const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
-        const name = p.server
-          ? `[**${p.name}**](https://${host}/character/${cfg.region}/${slugifyServer(p.server)}/${encodeURIComponent(p.name)})`
-          : `**${p.name}**`;
-        return `${rank} ${REPORT_ROLE_EMOJI[p.role]} ${name} — ${parseEmojiFor(p.avgParse)} ${p.avgParse}%`;
-      })
-    : [
-        `_Aucun joueur n'a fait le raid complet (${report.bossCount} boss) dans ce rapport._`,
-      ];
+  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*\n\n' : '';
+  await saveReport(guildId, code, { processedAt: Date.now(), pot, excluded: [...excluded] });
+
+  const footer = [
+    `${report.zoneName || 'Raid'} · ${report.bossCount} boss · ${eligible.length}/${report.totalPlayers} éligibles`,
+  ];
+  if (pot > 0) {
+    footer.push(`Pot ${fmtGold(pot)} · bonus 10% = ${fmtGold(bonusPool)} → +${fmtGold(bonusPer)}/joueur`);
+  }
+  if (excluded.size) footer.push(`${excluded.size} exclu(s)`);
 
   const embed = {
     color: 0xe5cc80,
     title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
-    description: lines.join('\n'),
-    footer: {
-      text:
-        `${report.zoneName || 'Raid'} · full clear = ${report.bossCount} boss · ` +
-        `${report.players.length}/${report.totalPlayers} full clear · roster mis à jour`,
-    },
+    description: already + lines.join('\n'),
+    footer: { text: footer.join(' · ') },
   };
-  return { embeds: [embed] };
+  return { embeds: [embed], components: buildReportButtons(code, pot, true) };
 }
 
 function truncate(s: string, n: number): string {

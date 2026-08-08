@@ -15,11 +15,15 @@ import {
   buildRoleSelectResponse,
   buildLinkModalResponse,
   buildReevalModalResponse,
+  buildExcludeModalResponse,
   LINK_BUTTON_ID,
   REEVAL_BUTTON_ID,
   ROLE_SELECT_ID,
   LINK_MODAL_PREFIX,
   REEVAL_MODAL_ID,
+  RPT_RECALC_PREFIX,
+  RPT_EXCLUDE_PREFIX,
+  RPT_EXCLUDE_MODAL_PREFIX,
 } from './panel';
 import { fmtGold, buildSummaryEmbed } from './format';
 import type { Link, WclMetric } from './types';
@@ -33,6 +37,7 @@ interface Interaction {
   token: string;
   guild_id?: string;
   channel_id?: string;
+  message?: { id: string };
   member?: { user: { id: string }; permissions?: string; roles?: string[] };
   data?: any;
 }
@@ -54,6 +59,12 @@ function ephemeralEmbed(embed: unknown): unknown {
 }
 function deferredEphemeral(): unknown {
   return { type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } };
+}
+function deferredPublic(): unknown {
+  return { type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE, data: {} };
+}
+function deferredUpdate(): unknown {
+  return { type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE, data: {} };
 }
 function getOption(interaction: Interaction, name: string): string | undefined {
   return (interaction.data?.options ?? []).find((o: any) => o.name === name)?.value;
@@ -247,6 +258,7 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
     case 'rapport': {
       if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
       const lien = getOption(interaction, 'lien')!;
+      const pot = parseGold(getOption(interaction, 'pot'));
       await enqueue({
         kind: 'report',
         applicationId: interaction.application_id,
@@ -254,8 +266,9 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
         guildId,
         userId,
         reportUrl: lien,
+        pot,
       });
-      return deferredEphemeral();
+      return deferredPublic(); // message PUBLIC
     }
 
     default:
@@ -278,6 +291,35 @@ async function handleComponent(interaction: GuildInteraction): Promise<unknown> 
     const txt = cur >= 1000 ? `${Math.round(cur / 1000)}k` : String(cur);
     return buildReevalModalResponse(txt);
   }
+
+  // Rapport : recalculer (édite le message du Top)
+  if (customId.startsWith(`${RPT_RECALC_PREFIX}:`)) {
+    if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
+    const [, code, potStr] = customId.split(':');
+    await enqueue({
+      kind: 'report',
+      applicationId: interaction.application_id,
+      token: interaction.token,
+      guildId: interaction.guild_id,
+      userId: interaction.member.user.id,
+      reportUrl: code,
+      pot: Number(potStr) || 0,
+    });
+    return deferredUpdate();
+  }
+
+  // Rapport : ouvrir le modal d'exclusion
+  if (customId.startsWith(`${RPT_EXCLUDE_PREFIX}:`)) {
+    if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
+    const [, code, potStr] = customId.split(':');
+    return buildExcludeModalResponse(
+      code,
+      Number(potStr) || 0,
+      interaction.channel_id ?? '',
+      interaction.message?.id ?? '',
+    );
+  }
+
   return ephemeral('Action inconnue.');
 }
 
@@ -304,6 +346,25 @@ async function handleModal(interaction: GuildInteraction): Promise<unknown> {
       guildId,
       userId,
       targetUserId: userId,
+    });
+    return deferredEphemeral();
+  }
+
+  // Rapport : exclusion d'un joueur -> recalcul du message du Top
+  if (customId.startsWith(`${RPT_EXCLUDE_MODAL_PREFIX}:`)) {
+    if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
+    const [, code, potStr, channelId, messageId] = customId.split(':');
+    await enqueue({
+      kind: 'report',
+      applicationId: interaction.application_id,
+      token: interaction.token,
+      guildId: interaction.guild_id,
+      userId: interaction.member.user.id,
+      reportUrl: code,
+      pot: Number(potStr) || 0,
+      excludeName: fields.name,
+      channelId,
+      messageId,
     });
     return deferredEphemeral();
   }

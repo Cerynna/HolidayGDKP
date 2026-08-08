@@ -3,7 +3,7 @@ import { setLink } from './store';
 import { runGrade, runRefresh, runReport } from './service';
 import { postBoard, updateBoard } from './board';
 import { runSetup, refreshPanel } from './setup';
-import { editOriginalResponse, type MessagePayload } from './discord';
+import { editOriginalResponse, editMessage, type MessagePayload } from './discord';
 import type { PendingJob } from './types';
 
 export async function processJob(job: PendingJob): Promise<void> {
@@ -28,7 +28,18 @@ export async function processJob(job: PendingJob): Promise<void> {
     } else if (job.kind === 'refresh') {
       payload = await runRefresh(job.guildId);
     } else if (job.kind === 'report') {
-      payload = await runReport(job.guildId, job.reportUrl ?? '');
+      const reportPayload = await runReport(job.guildId, {
+        reportUrl: job.reportUrl,
+        pot: job.pot,
+        excludeName: job.excludeName,
+      });
+      if (job.messageId && job.channelId) {
+        // Exclusion : édite le message du Top existant, accuse réception en éphémère.
+        await editMessage(job.channelId, job.messageId, reportPayload);
+        payload = { content: '✅ Top recalculé (joueur exclu).' };
+      } else {
+        payload = reportPayload;
+      }
     } else if (job.kind === 'board') {
       if (job.channelId) {
         await postBoard(job.guildId, job.channelId);
