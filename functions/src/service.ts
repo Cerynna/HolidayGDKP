@@ -350,7 +350,19 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const bonusPool = Math.round(pot * 0.1);
   const bonusPer = top.length ? Math.floor(bonusPool / top.length) : 0;
 
-  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*\n' : '';
+  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*' : '';
+
+  const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
+  const reportUrl = `https://${host}/reports/${code}`;
+
+  // Part de split : 90% du pot réparti entre TOUS les full clear (l'exclusion ne
+  // concerne que le bonus du Top 10, pas le split).
+  const splitPer = report.players.length ? Math.floor((pot * 0.9) / report.players.length) : 0;
+  const moneyLine =
+    pot > 0
+      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(90% ÷ ${report.players.length})* · **Bonus Top :** +${fmtGold(bonusPer)}`
+      : '';
+  const linkLine = `🔗 [Voir les logs du raid](${reportUrl})`;
 
   // Tableau aligné (monospace) : pas d'emoji/lien dans le bloc code pour garder l'alignement.
   const roleTxt: Record<string, string> = { tank: 'TANK', heal: 'HEAL', dps: 'DPS' };
@@ -379,15 +391,13 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const footer = [
     `${report.zoneName || 'Raid'} · ${report.bossCount} boss · ${eligible.length}/${report.totalPlayers} éligibles`,
   ];
-  if (pot > 0) {
-    footer.push(`Pot ${fmtGold(pot)} · bonus 10% = ${fmtGold(bonusPool)} → +${fmtGold(bonusPer)}/joueur`);
-  }
   if (excluded.size) footer.push(`${excluded.size} exclu(s)`);
 
   const embed = {
     color: 0xe5cc80,
     title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
-    description: [already + table, mentionLine].filter(Boolean).join('\n'),
+    url: reportUrl,
+    description: [already, moneyLine, table, mentionLine, linkLine].filter(Boolean).join('\n'),
     footer: { text: footer.join(' · ') },
   };
   return { embeds: [embed], components: buildReportButtons(code, pot, true) };
