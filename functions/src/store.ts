@@ -1,13 +1,14 @@
 // Persistance Firestore scopée par guilde : liens, réclamations de perso, config.
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { slugifyServer } from './warcraftlogs';
 import { config as cfg } from './config';
-import type { Link, GuildConfig } from './types';
+import type { Link, GuildConfig, GuildReport } from './types';
 
 const GUILDS = 'guilds';
 const LINKS = 'links';
 const CLAIMS = 'claims';
+const REPORTS = 'reports';
 
 function db(): Firestore {
   if (!getApps().length) initializeApp();
@@ -63,6 +64,42 @@ export async function setBoard(
   messageIds: string[],
 ): Promise<void> {
   await updateGuildConfig(guildId, { boardChannelId: channelId, boardMessageIds: messageIds });
+}
+
+// --- Rapports traités ---
+function reportsCol(guildId: string) {
+  return guildDoc(guildId).collection(REPORTS);
+}
+
+export async function getReport(guildId: string, code: string): Promise<GuildReport | null> {
+  const snap = await reportsCol(guildId).doc(code).get();
+  return snap.exists ? (snap.data() as GuildReport) : null;
+}
+
+export async function saveReport(
+  guildId: string,
+  code: string,
+  patch: GuildReport,
+): Promise<void> {
+  await reportsCol(guildId).doc(code).set(patch, { merge: true });
+}
+
+/** Bascule l'exclusion d'un joueur pour ce rapport. Renvoie true s'il est désormais exclu. */
+export async function toggleReportExclusion(
+  guildId: string,
+  code: string,
+  name: string,
+): Promise<boolean> {
+  const key = name.trim().toLowerCase();
+  const ref = reportsCol(guildId).doc(code);
+  const snap = await ref.get();
+  const excluded = (snap.exists ? (snap.data() as GuildReport).excluded : []) ?? [];
+  const isExcluded = excluded.map((s) => s.toLowerCase()).includes(key);
+  await ref.set(
+    { excluded: isExcluded ? FieldValue.arrayRemove(key) : FieldValue.arrayUnion(key) },
+    { merge: true },
+  );
+  return !isExcluded;
 }
 
 // --- Liens ---

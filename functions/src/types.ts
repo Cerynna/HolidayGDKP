@@ -84,6 +84,12 @@ export interface GuildConfig {
   panelChannelId?: string;
   panelMessageId?: string;
   rosterChannelId?: string;
+  annonceChannelId?: string;
+  eventsChannelId?: string;
+  raidVoiceId?: string;
+  debriefVoiceId?: string;
+  orgaChannelId?: string;
+  organisationRoleId?: string;
 }
 
 export interface DifficultyPerf {
@@ -113,7 +119,16 @@ export interface ResolvedGrade {
 
 /** Job asynchrone déposé dans Firestore et traité par le worker. */
 export interface PendingJob {
-  kind: 'link' | 'grade' | 'refresh' | 'board' | 'refreshBoard' | 'setup' | 'panel' | 'report';
+  kind:
+    | 'link'
+    | 'grade'
+    | 'refresh'
+    | 'board'
+    | 'refreshBoard'
+    | 'setup'
+    | 'panel'
+    | 'report'
+    | 'unlink';
   applicationId: string;
   token: string; // token d'interaction (valide 15 min)
   guildId: string;
@@ -123,7 +138,19 @@ export interface PendingJob {
   gold?: number;
   wclMetric?: WclMetric;
   targetUserId?: string; // pour /grade sur un autre membre
-  channelId?: string; // salon d'origine, pour /tableau et /panneau
+  channelId?: string; // salon d'origine, pour /tableau et /panneau (et édition de message)
   reportUrl?: string; // pour /rapport
+  pot?: number; // montant total du pot (PO), pour /rapport
+  parts?: number; // nombre de parts (split) — override optionnel
+  excludeName?: string; // perso à exclure du Top (pour ce rapport)
+  messageId?: string; // message à éditer (recalcul/exclusion sur un message existant)
   createdAt?: number;
+}
+
+/** Rapport de raid déjà traité (Firestore guilds/{g}/reports/{code}). */
+export interface GuildReport {
+  processedAt?: number;
+  pot?: number;
+  parts?: number; // nombre de parts pour le split (mémorisé pour recalcul)
+  excluded?: string[]; // noms de perso exclus du Top (minuscules), pour CE rapport
 }

@@ -185,18 +185,22 @@ function round1(v: number): number {
 
 export interface ReportPlayer {
   name: string;
+  server: string;
   className: string;
   spec: string;
   role: 'tank' | 'heal' | 'dps';
-  avgParse: number; // moyenne des rankPercent sur les combats du rapport
+  avgParse: number; // moyenne du meilleur parse par boss (sur les 14)
   best: number;
-  fights: number;
+  bosses: number; // nombre de boss différents faits
 }
 
 export interface ReportTop {
   title: string;
   zoneName: string;
-  players: ReportPlayer[]; // triés par avgParse décroissant
+  bossCount: number; // nombre de boss du raid (hors agrégat)
+  totalPlayers: number; // joueurs présents (avant filtre full clear)
+  endRaiders: number; // présents au dernier boss (effectif de fin = base du split)
+  players: ReportPlayer[]; // FULL CLEAR uniquement, triés par avgParse décroissant
 }
 
 /** Extrait le code de rapport d'une URL WarcraftLogs (ex: .../reports/CODE?...). */
@@ -213,7 +217,11 @@ const ROLE_MAP: Record<string, 'tank' | 'heal' | 'dps'> = {
   dps: 'dps',
 };
 
-/** Récupère le classement des joueurs d'un rapport (moyenne des parses par combat). */
+/**
+ * Classement des joueurs d'un rapport. On ne garde QUE les joueurs présents sur
+ * TOUS les boss (full clear), et on moyenne leur meilleur parse par boss.
+ * L'entrée agrégée du raid (même nom que la zone) est exclue du comptage.
+ */
 export async function getReportTop(code: string, classic = false): Promise<ReportTop> {
   const query = `
     query ReportRankings($code: String!) {
@@ -221,6 +229,7 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
         report(code: $code) {
           title
           zone { name }
+          fights(killType: Kills) { encounterID startTime friendlyPlayers }
           rankings
         }
       }
@@ -230,6 +239,7 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
       report?: {
         title: string;
         zone?: { name: string } | null;
+        fights?: Array<{ encounterID: number; startTime: number; friendlyPlayers?: number[] }> | null;
         rankings: { data?: unknown[] } | null;
       } | null;
     };
@@ -237,46 +247,90 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
 
   const report = data?.reportData?.report;
   if (!report) throw new Error('Rapport introuvable. Vérifie le lien.');
+  const zoneName = report.zone?.name ?? '';
 
   interface Acc {
     name: string;
+    server: string;
     className: string;
     spec: string;
     role: 'tank' | 'heal' | 'dps';
-    sum: number;
-    count: number;
-    best: number;
+    byBoss: Map<number, number>; // encounterId -> meilleur rankPercent
   }
   const acc = new Map<string, Acc>();
+  const allBosses = new Set<number>();
+  // Présents au dernier boss (fightID le plus élevé) = effectif de fin de raid.
+  let lastFightId = -1;
+  let lastFightParticipants = new Set<string>();
 
   for (const fight of (report.rankings?.data ?? []) as any[]) {
+    const encId: number | undefined = fight?.encounter?.id;
+    const encName: string = fight?.encounter?.name ?? '';
+    // Exclut l'agrégat du raid (porte le nom de la zone) et les entrées sans boss.
+    if (encId == null || encName === zoneName) continue;
+    allBosses.add(encId);
+
+    const fightId: number = fight?.fightID ?? 0;
+    const participants = new Set<string>();
+
     const roles = fight?.roles ?? {};
     for (const [roleKey, roleName] of Object.entries(ROLE_MAP)) {
       for (const c of roles[roleKey]?.characters ?? []) {
+        const serverName: string =
+          typeof c.server === 'string' ? c.server : (c.server?.name ?? c.server?.slug ?? '');
+        const key = String(c.id ?? `${c.name}-${serverName}`);
+        participants.add(key); // présent à ce combat (même sans parse)
+
         if (typeof c.rankPercent !== 'number') continue;
-        const key = String(c.id ?? c.name);
         const e =
           acc.get(key) ??
-          ({ name: c.name, className: c.class, spec: c.spec, role: roleName, sum: 0, count: 0, best: 0 } as Acc);
-        e.sum += c.rankPercent;
-        e.count += 1;
-        if (c.rankPercent > e.best) e.best = c.rankPercent;
+          ({
+            name: c.name,
+            server: serverName,
+            className: c.class,
+            spec: c.spec,
+            role: roleName,
+            byBoss: new Map<number, number>(),
+          } as Acc);
+        const prev = e.byBoss.get(encId);
+        if (prev === undefined || c.rankPercent > prev) e.byBoss.set(encId, c.rankPercent);
         acc.set(key, e);
       }
     }
+
+    if (fightId > lastFightId) {
+      lastFightId = fightId;
+      lastFightParticipants = participants;
+    }
   }
 
+  const bossCount = allBosses.size;
+
+  // Présents au dernier boss via `fights.friendlyPlayers` : inclut les logs masqués
+  // (absents des rankings). Fallback sur les participants ranked du dernier combat.
+  const bossFights = (report.fights ?? []).filter((f) => f.encounterID > 0);
+  const lastBossFight = bossFights.reduce<(typeof bossFights)[number] | null>(
+    (best, f) => (best === null || f.startTime > best.startTime ? f : best),
+    null,
+  );
+  const endRaiders = lastBossFight?.friendlyPlayers?.length || lastFightParticipants.size;
+
   const players: ReportPlayer[] = [...acc.values()]
-    .map((e) => ({
-      name: e.name,
-      className: e.className,
-      spec: e.spec,
-      role: e.role,
-      avgParse: round1(e.sum / e.count),
-      best: round1(e.best),
-      fights: e.count,
-    }))
+    .filter((e) => e.byBoss.size === bossCount && bossCount > 0) // full clear uniquement
+    .map((e) => {
+      const parses = [...e.byBoss.values()];
+      return {
+        name: e.name,
+        server: e.server,
+        className: e.className,
+        spec: e.spec,
+        role: e.role,
+        avgParse: round1(parses.reduce((s, v) => s + v, 0) / parses.length),
+        best: round1(Math.max(...parses)),
+        bosses: e.byBoss.size,
+      };
+    })
     .sort((a, b) => b.avgParse - a.avgParse);
 
-  return { title: report.title, zoneName: report.zone?.name ?? '', players };
+  return { title: report.title, zoneName, bossCount, totalPlayers: acc.size, endRaiders, players };
 }

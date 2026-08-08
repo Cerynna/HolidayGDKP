@@ -1,6 +1,17 @@
 // Orchestration métier (worker) : WCL -> grade parse + finance + statut -> rôles + pseudo + tableau.
 import { config as cfg } from './config';
-import { getLink, setLink, allLinks, getRealm } from './store';
+import {
+  getLink,
+  setLink,
+  allLinks,
+  removeLink,
+  getRealm,
+  getReport,
+  saveReport,
+  toggleReportExclusion,
+} from './store';
+import { fmtGold } from './format';
+import { buildReportButtons } from './panel';
 import {
   getCharacterPerformance,
   slugifyServer,
@@ -245,7 +256,9 @@ export async function runRefresh(guildId: string): Promise<MessagePayload> {
   for (const link of links) {
     const member = await getMember(guildId, link.userId);
     if (!member) {
-      lines.push(`⚪ <@${link.userId}> — plus sur le serveur`);
+      // Membre parti du serveur : on retire son lien du roster.
+      await removeLink(guildId, link.userId).catch(() => {});
+      lines.push(`🗑️ <@${link.userId}> — parti, retiré du roster`);
       continue;
     }
     try {
@@ -276,6 +289,34 @@ export async function runRefresh(guildId: string): Promise<MessagePayload> {
   return { content: truncate(header + lines.join('\n'), 1900) };
 }
 
+/** /unlink : retire les rôles attribués par le bot + réinitialise le pseudo. */
+export async function runUnlink(guildId: string, userId: string): Promise<void> {
+  const member = await getMember(guildId, userId);
+  if (!member) {
+    await updateBoard(guildId).catch(() => {});
+    return;
+  }
+
+  const roles = await getGuildRoles(guildId);
+  const botRoleNames = new Set<string>([
+    ...allGradeRoleNames(cfg),
+    ...allFinanceRoleNames(cfg),
+    ...allStatusRoleNames(cfg),
+  ]);
+  for (const rid of member.roles) {
+    const r = roles.find((x) => x.id === rid);
+    if (r && botRoleNames.has(r.name.toLowerCase())) {
+      await removeMemberRole(guildId, userId, rid).catch(() => {});
+    }
+  }
+
+  // Réinitialise le pseudo (retire le préfixe [parse - emoji]).
+  const base = baseName(member.nick, member.globalName, member.username);
+  await setNickname(guildId, userId, base).catch(() => {});
+
+  await updateBoard(guildId).catch(() => {});
+}
+
 /** Emoji du grade de parse correspondant à un score. */
 function parseEmojiFor(score: number): string {
   const table = Array.isArray(cfg.grades) ? cfg.grades : Object.values(cfg.grades).flat();
@@ -285,39 +326,122 @@ function parseEmojiFor(score: number): string {
 
 const REPORT_ROLE_EMOJI = { tank: '🛡️', heal: '💚', dps: '⚔️' } as const;
 
-/** /rapport : met à jour tout le roster + sort le Top 10 du raid depuis un lien WCL. */
-export async function runReport(guildId: string, reportUrl: string): Promise<MessagePayload> {
-  const code = extractReportCode(reportUrl);
+export interface ReportOptions {
+  reportUrl?: string;
+  pot?: number;
+  parts?: number; // override du nombre de parts (split)
+  excludeName?: string;
+}
+
+/** /rapport : refresh du roster + Top 10 (bonus, mentions Discord, exclusions). */
+export async function runReport(guildId: string, opts: ReportOptions): Promise<MessagePayload> {
+  const code = extractReportCode(opts.reportUrl ?? '');
   if (!code) {
     return {
       content:
-        '❌ Lien de rapport invalide. Exemple :\n`https://classic.warcraftlogs.com/reports/aBcD1234efGh`',
+        '❌ Lien de rapport invalide. Exemple :\n`https://fr.classic.warcraftlogs.com/reports/aBcD1234efGh`',
     };
   }
+
+  // Bascule l'exclusion demandée (exclut si absent, réintègre si déjà exclu).
+  if (opts.excludeName) await toggleReportExclusion(guildId, code, opts.excludeName);
+
+  const saved = await getReport(guildId, code);
+  const pot = opts.pot ?? saved?.pot ?? 0;
+  const partsOpt = opts.parts ?? saved?.parts; // override éventuel du nombre de parts
+  const excluded = new Set((saved?.excluded ?? []).map((s) => s.toLowerCase()));
 
   const report = await getReportTop(code, cfg.classic ?? false);
 
   // Met à jour tout le roster déjà en base (grades, rôles, pseudos, tableau).
   await runRefresh(guildId).catch(() => {});
 
-  const medals = ['🥇', '🥈', '🥉'];
-  const top = report.players.slice(0, 10);
-  const lines = top.length
-    ? top.map((p, i) => {
-        const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
-        return `${rank} ${REPORT_ROLE_EMOJI[p.role]} **${p.name}** — ${parseEmojiFor(p.avgParse)} ${p.avgParse}% · ${p.fights} log`;
-      })
-    : ['_Aucun classement trouvé dans ce rapport._'];
+  // Classement pas encore prêt (raid trop récent) : bouton pour réessayer.
+  if (report.players.length === 0) {
+    await saveReport(guildId, code, partsOpt ? { pot, parts: partsOpt } : { pot });
+    return {
+      content:
+        '⏳ **Classement pas encore disponible** pour ce rapport (le raid est peut-être trop récent). ' +
+        'Réessaie dans quelques minutes avec le bouton ci-dessous.',
+      components: buildReportButtons(code, pot, false),
+    };
+  }
+
+  const eligible = report.players.filter((p) => !excluded.has(p.name.toLowerCase()));
+  const top = eligible.slice(0, 10);
+
+  // Mentions Discord : nom de perso -> userId lié.
+  const links = await allLinks(guildId);
+  const byChar = new Map<string, string>();
+  for (const l of links) {
+    if (l.name) byChar.set(l.name.toLowerCase(), l.userId);
+    if (l.summary?.char) byChar.set(l.summary.char.toLowerCase(), l.userId);
+  }
+
+  // Bonus = 10 % du pot, réparti en parts égales entre le Top.
+  const bonusPool = Math.round(pot * 0.1);
+  const bonusPer = top.length ? Math.floor(bonusPool / top.length) : 0;
+
+  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*' : '';
+
+  const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
+  const reportUrl = `https://${host}/reports/${code}`;
+
+  // Part de split : 88% du pot ÷ nombre de parts (10% Top 10 + 1% RL + 1% ML prélevés).
+  // Parts = override manuel, sinon présents au dernier boss (effectif de fin), sinon 25.
+  const splitDenom = partsOpt && partsOpt > 0 ? partsOpt : report.endRaiders > 0 ? report.endRaiders : 25;
+  const splitPer = splitDenom ? Math.floor((pot * 0.88) / splitDenom) : 0;
+  const rlCut = Math.round(pot * 0.01);
+  const mlCut = Math.round(pot * 0.01);
+  const moneyLine =
+    pot > 0
+      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(88% ÷ ${splitDenom})*\n` +
+        `🏆 **Bonus Top 10 :** +${fmtGold(bonusPer)}/joueur · 👑 **RL :** +${fmtGold(rlCut)} · 🎁 **ML :** +${fmtGold(mlCut)}`
+      : '';
+  const linkLine = `🔗 [Voir les logs du raid](${reportUrl})`;
+
+  // Tableau aligné (monospace) : pas d'emoji/lien dans le bloc code pour garder l'alignement.
+  const roleTxt: Record<string, string> = { tank: 'TANK', heal: 'HEAL', dps: 'DPS' };
+  const rows = top.map((p, i) => {
+    const rank = String(i + 1).padStart(2);
+    const name = (p.name.length > 15 ? p.name.slice(0, 14) + '…' : p.name).padEnd(15);
+    const role = (roleTxt[p.role] ?? '').padEnd(4);
+    const parse = `${p.avgParse.toFixed(1)}%`.padStart(6);
+    const bonus = pot > 0 ? `  ${`+${fmtGold(bonusPer)}`.padStart(6)}` : '';
+    return `${rank}  ${name} ${role} ${parse}${bonus}`;
+  });
+  const header =
+    `${'#'.padStart(2)}  ${'Joueur'.padEnd(15)} ${'Rôle'.padEnd(4)} ${'Parse'.padStart(6)}` +
+    (pot > 0 ? `  ${'Bonus'.padStart(6)}` : '');
+  const table = '```\n' + header + '\n' + rows.join('\n') + '\n```';
+
+  // Mentions Discord des joueurs du Top (pour ping / paiement du bonus).
+  const mentions = top
+    .map((p) => byChar.get(p.name.toLowerCase()))
+    .filter((v): v is string => Boolean(v))
+    .map((uid) => `<@${uid}>`);
+  const mentionLine = mentions.length ? `👉 **À récompenser :** ${mentions.join(' ')}` : '';
+
+  await saveReport(guildId, code, {
+    processedAt: Date.now(),
+    pot,
+    parts: splitDenom,
+    excluded: [...excluded],
+  });
+
+  const footer = [
+    `${report.zoneName || 'Raid'} · ${report.bossCount} boss · ${eligible.length}/${report.totalPlayers} éligibles`,
+  ];
+  if (excluded.size) footer.push(`${excluded.size} exclu(s)`);
 
   const embed = {
     color: 0xe5cc80,
     title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
-    description: lines.join('\n'),
-    footer: {
-      text: `${report.zoneName || 'Raid'} · ${report.players.length} joueur(s) analysé(s) · roster mis à jour`,
-    },
+    url: reportUrl,
+    description: [already, moneyLine, table, mentionLine, linkLine].filter(Boolean).join('\n'),
+    footer: { text: footer.join(' · ') },
   };
-  return { embeds: [embed] };
+  return { embeds: [embed], components: buildReportButtons(code, pot, true) };
 }
 
 function truncate(s: string, n: number): string {

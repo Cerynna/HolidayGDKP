@@ -8,6 +8,10 @@ export const REEVAL_BUTTON_ID = 'wow_reeval_button';
 export const ROLE_SELECT_ID = 'wow_role_select';
 export const LINK_MODAL_PREFIX = 'wow_link_modal';
 export const REEVAL_MODAL_ID = 'wow_reeval_modal';
+// Rapport : custom_id encodent `prefix:code:pot(:channel:message)`
+export const RPT_RECALC_PREFIX = 'rpt_recalc';
+export const RPT_EXCLUDE_PREFIX = 'rpt_excl';
+export const RPT_EXCLUDE_MODAL_PREFIX = 'rpt_exclm';
 
 function allGrades(): Grade[] {
   return Array.isArray(cfg.grades) ? cfg.grades : Object.values(cfg.grades).flat();
@@ -19,13 +23,13 @@ const RULES_DESCRIPTION = [
   '### ⚙️ Conditions & fonctionnement',
   '- **Exigence :** Logs **BLEUS (50+) minimum**, personnage optimisé & consommables prêts.',
   '- **Addon obligatoire :** **Gargul** (à jour via CurseForge) pour la gestion des enchères et des loots.',
-  '- **Prime à la performance :** l’organisation ne prend **aucune commission** ! Les **10 % de frais orga** sont **100 % redistribués** le lendemain du raid en bonus cash au **Top 10 performance** (DPS / Heal / Tank).',
+  '- **Prime à la performance :** **10 % du pot** redistribués le lendemain en bonus cash au **Top 10 performance** (DPS / Heal / Tank).',
   '- **Règle anti-parse monkey :** le respect des strats passe avant les chiffres. Le Raid Leader / Staff se réserve le droit de **disqualifier de la prime** tout joueur qui ignore les mécaniques ou met le groupe en danger pour monter ses logs.',
   '',
   '### 💰 Enchères & Pot (GDKP)',
   '- **Normal (NM) :** enchères dès **10 000 po (10k)** — **Héroïque (HM) :** dès **30 000 po (30k)**',
   '- **Off-Spec :** moitié prix — **Transmo :** dès **1 000 po (1k)** — Surenchères de **1k en 1k**.',
-  '- **Distribution :** **90 %** du pot final réparti équitablement en fin de raid entre les membres éligibles ; les **10 %** restants repartent en prime de performance — soit **100 % du pot redistribué**.',
+  '- **Répartition du pot :** **88 %** répartis équitablement entre les présents en fin de raid · **10 %** bonus au **Top 10** · **1 %** au **Raid Leader** · **1 %** au **Master Looter**.',
   '',
   '⛔ Tout comportement toxique, AFK délibéré ou tentative d’escroquerie entraînera une **exclusion immédiate sans part du pot**.',
 ].join('\n');
@@ -181,6 +185,60 @@ export function buildReevalModalResponse(currentGoldText: string): unknown {
               required: true,
               value: currentGoldText,
               placeholder: 'ex : 150k',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// --- Composants du /rapport ---
+
+/** Boutons sous un Top 10 : Recalculer + Exclure (code et pot encodés). */
+export function buildReportButtons(code: string, pot: number, withExclude = true): unknown[] {
+  const buttons: unknown[] = [
+    {
+      type: ComponentType.BUTTON,
+      style: 2, // secondary
+      label: '🔄 Recalculer',
+      custom_id: `${RPT_RECALC_PREFIX}:${code}:${pot}`,
+    },
+  ];
+  if (withExclude) {
+    buttons.push({
+      type: ComponentType.BUTTON,
+      style: 4, // danger (rouge)
+      label: '🚫 Exclure / réintégrer',
+      custom_id: `${RPT_EXCLUDE_PREFIX}:${code}:${pot}`,
+    });
+  }
+  return [{ type: ComponentType.ACTION_ROW, components: buttons }];
+}
+
+/** Modal de saisie du perso à exclure (contexte encodé dans le custom_id). */
+export function buildExcludeModalResponse(
+  code: string,
+  pot: number,
+  channelId: string,
+  messageId: string,
+): unknown {
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `${RPT_EXCLUDE_MODAL_PREFIX}:${code}:${pot}:${channelId}:${messageId}`,
+      title: 'Exclure / réintégrer un joueur',
+      components: [
+        {
+          type: ComponentType.ACTION_ROW,
+          components: [
+            {
+              type: ComponentType.TEXT_INPUT,
+              custom_id: 'name',
+              label: 'Nom du perso (bascule exclu/réintégré)',
+              style: 1,
+              required: true,
+              placeholder: 'ex : Bizoutein',
             },
           ],
         },

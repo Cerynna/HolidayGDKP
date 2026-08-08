@@ -64,6 +64,13 @@ const commands = [
     default_member_permissions: MANAGE_ROLES,
     options: [
       { type: 3, name: 'lien', description: 'Lien du rapport WarcraftLogs', required: true },
+      { type: 3, name: 'pot', description: 'Montant total du pot (ex: 500k) — bonus 10% au Top 10' },
+      {
+        type: 4,
+        name: 'parts',
+        description: 'Nombre de parts pour le split (défaut : présents au dernier boss)',
+        min_value: 1,
+      },
     ],
   },
 ];
