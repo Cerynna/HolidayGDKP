@@ -350,20 +350,30 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const bonusPool = Math.round(pot * 0.1);
   const bonusPer = top.length ? Math.floor(bonusPool / top.length) : 0;
 
-  const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
-  const medals = ['🥇', '🥈', '🥉'];
-  const lines = top.map((p, i) => {
-    const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
-    const link = p.server
-      ? `[**${p.name}**](https://${host}/character/${cfg.region}/${slugifyServer(p.server)}/${encodeURIComponent(p.name)})`
-      : `**${p.name}**`;
-    const uid = byChar.get(p.name.toLowerCase());
-    const mention = uid ? ` <@${uid}>` : '';
-    const bonus = pot > 0 ? ` · 💰 +${fmtGold(bonusPer)}` : '';
-    return `${rank} ${REPORT_ROLE_EMOJI[p.role]} ${link}${mention} — ${parseEmojiFor(p.avgParse)} ${p.avgParse}%${bonus}`;
-  });
+  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*\n' : '';
 
-  const already = saved?.processedAt ? '⚠️ *Rapport déjà traité — recalcul.*\n\n' : '';
+  // Tableau aligné (monospace) : pas d'emoji/lien dans le bloc code pour garder l'alignement.
+  const roleTxt: Record<string, string> = { tank: 'TANK', heal: 'HEAL', dps: 'DPS' };
+  const rows = top.map((p, i) => {
+    const rank = String(i + 1).padStart(2);
+    const name = (p.name.length > 15 ? p.name.slice(0, 14) + '…' : p.name).padEnd(15);
+    const role = (roleTxt[p.role] ?? '').padEnd(4);
+    const parse = `${p.avgParse.toFixed(1)}%`.padStart(6);
+    const bonus = pot > 0 ? `  ${`+${fmtGold(bonusPer)}`.padStart(6)}` : '';
+    return `${rank}  ${name} ${role} ${parse}${bonus}`;
+  });
+  const header =
+    `${'#'.padStart(2)}  ${'Joueur'.padEnd(15)} ${'Rôle'.padEnd(4)} ${'Parse'.padStart(6)}` +
+    (pot > 0 ? `  ${'Bonus'.padStart(6)}` : '');
+  const table = '```\n' + header + '\n' + rows.join('\n') + '\n```';
+
+  // Mentions Discord des joueurs du Top (pour ping / paiement du bonus).
+  const mentions = top
+    .map((p) => byChar.get(p.name.toLowerCase()))
+    .filter((v): v is string => Boolean(v))
+    .map((uid) => `<@${uid}>`);
+  const mentionLine = mentions.length ? `👉 **À récompenser :** ${mentions.join(' ')}` : '';
+
   await saveReport(guildId, code, { processedAt: Date.now(), pot, excluded: [...excluded] });
 
   const footer = [
@@ -377,7 +387,7 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const embed = {
     color: 0xe5cc80,
     title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
-    description: already + lines.join('\n'),
+    description: [already + table, mentionLine].filter(Boolean).join('\n'),
     footer: { text: footer.join(' · ') },
   };
   return { embeds: [embed], components: buildReportButtons(code, pot, true) };
