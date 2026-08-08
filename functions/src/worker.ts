@@ -1,6 +1,6 @@
 // Traitement asynchrone d'un job : WCL + rôles, puis édition de la réponse différée.
 import { setLink } from './store';
-import { runGrade, runRefresh } from './service';
+import { runGrade, runRefresh, runReport } from './service';
 import { postBoard, updateBoard } from './board';
 import { runSetup, refreshPanel } from './setup';
 import { editOriginalResponse, type MessagePayload } from './discord';
@@ -27,6 +27,8 @@ export async function processJob(job: PendingJob): Promise<void> {
       payload = await runGrade(job.guildId, job.targetUserId ?? job.userId);
     } else if (job.kind === 'refresh') {
       payload = await runRefresh(job.guildId);
+    } else if (job.kind === 'report') {
+      payload = await runReport(job.guildId, job.reportUrl ?? '');
     } else if (job.kind === 'board') {
       if (job.channelId) {
         await postBoard(job.guildId, job.channelId);

@@ -180,3 +180,103 @@ function numOrNull(v: number | null | undefined): number | null {
 function round1(v: number): number {
   return Math.round(v * 10) / 10;
 }
+
+// --- Rapport (report) : Top des joueurs d'un raid ---
+
+export interface ReportPlayer {
+  name: string;
+  className: string;
+  spec: string;
+  role: 'tank' | 'heal' | 'dps';
+  avgParse: number; // moyenne des rankPercent sur les combats du rapport
+  best: number;
+  fights: number;
+}
+
+export interface ReportTop {
+  title: string;
+  zoneName: string;
+  players: ReportPlayer[]; // triés par avgParse décroissant
+}
+
+/** Extrait le code de rapport d'une URL WarcraftLogs (ex: .../reports/CODE?...). */
+export function extractReportCode(input: string): string | null {
+  const m = input.trim().match(/reports\/([A-Za-z0-9]+)/);
+  if (m) return m[1];
+  // accepte aussi un code brut
+  return /^[A-Za-z0-9]{16,}$/.test(input.trim()) ? input.trim() : null;
+}
+
+const ROLE_MAP: Record<string, 'tank' | 'heal' | 'dps'> = {
+  tanks: 'tank',
+  healers: 'heal',
+  dps: 'dps',
+};
+
+/** Récupère le classement des joueurs d'un rapport (moyenne des parses par combat). */
+export async function getReportTop(code: string, classic = false): Promise<ReportTop> {
+  const query = `
+    query ReportRankings($code: String!) {
+      reportData {
+        report(code: $code) {
+          title
+          zone { name }
+          rankings
+        }
+      }
+    }`;
+  const data = await graphql<{
+    reportData?: {
+      report?: {
+        title: string;
+        zone?: { name: string } | null;
+        rankings: { data?: unknown[] } | null;
+      } | null;
+    };
+  }>(query, { code }, classic);
+
+  const report = data?.reportData?.report;
+  if (!report) throw new Error('Rapport introuvable. Vérifie le lien.');
+
+  interface Acc {
+    name: string;
+    className: string;
+    spec: string;
+    role: 'tank' | 'heal' | 'dps';
+    sum: number;
+    count: number;
+    best: number;
+  }
+  const acc = new Map<string, Acc>();
+
+  for (const fight of (report.rankings?.data ?? []) as any[]) {
+    const roles = fight?.roles ?? {};
+    for (const [roleKey, roleName] of Object.entries(ROLE_MAP)) {
+      for (const c of roles[roleKey]?.characters ?? []) {
+        if (typeof c.rankPercent !== 'number') continue;
+        const key = String(c.id ?? c.name);
+        const e =
+          acc.get(key) ??
+          ({ name: c.name, className: c.class, spec: c.spec, role: roleName, sum: 0, count: 0, best: 0 } as Acc);
+        e.sum += c.rankPercent;
+        e.count += 1;
+        if (c.rankPercent > e.best) e.best = c.rankPercent;
+        acc.set(key, e);
+      }
+    }
+  }
+
+  const players: ReportPlayer[] = [...acc.values()]
+    .map((e) => ({
+      name: e.name,
+      className: e.className,
+      spec: e.spec,
+      role: e.role,
+      avgParse: round1(e.sum / e.count),
+      best: round1(e.best),
+      fights: e.count,
+    }))
+    .sort((a, b) => b.avgParse - a.avgParse);
+
+  return { title: report.title, zoneName: report.zone?.name ?? '', players };
+}

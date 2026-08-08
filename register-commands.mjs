@@ -58,6 +58,14 @@ const commands = [
     description: 'Poste le tableau du roster dans ce salon (admin)',
     default_member_permissions: MANAGE_ROLES,
   },
+  {
+    name: 'rapport',
+    description: 'Met à jour le roster et sort le Top 10 depuis un lien Warcraft Logs (admin)',
+    default_member_permissions: MANAGE_ROLES,
+    options: [
+      { type: 3, name: 'lien', description: 'Lien du rapport WarcraftLogs', required: true },
+    ],
+  },
 ];
 
 // --guild : enregistre sur DISCORD_GUILD_ID (instantané, pour itérer en dev).

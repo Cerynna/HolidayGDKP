@@ -1,7 +1,12 @@
 // Orchestration métier (worker) : WCL -> grade parse + finance + statut -> rôles + pseudo + tableau.
 import { config as cfg } from './config';
 import { getLink, setLink, allLinks, getRealm } from './store';
-import { getCharacterPerformance, slugifyServer } from './warcraftlogs';
+import {
+  getCharacterPerformance,
+  slugifyServer,
+  getReportTop,
+  extractReportCode,
+} from './warcraftlogs';
 import {
   resolveGrade,
   resolveFinanceGrade,
@@ -269,6 +274,50 @@ export async function runRefresh(guildId: string): Promise<MessagePayload> {
   await updateBoard(guildId).catch(() => {});
   const header = `**Refresh** — ${links.length} lié(s), ${ok} classé(s), ${errors} erreur(s).\n`;
   return { content: truncate(header + lines.join('\n'), 1900) };
+}
+
+/** Emoji du grade de parse correspondant à un score. */
+function parseEmojiFor(score: number): string {
+  const table = Array.isArray(cfg.grades) ? cfg.grades : Object.values(cfg.grades).flat();
+  const g = [...table].sort((a, b) => b.min - a.min).find((x) => score >= x.min);
+  return g?.emoji ?? '⚪';
+}
+
+const REPORT_ROLE_EMOJI = { tank: '🛡️', heal: '💚', dps: '⚔️' } as const;
+
+/** /rapport : met à jour tout le roster + sort le Top 10 du raid depuis un lien WCL. */
+export async function runReport(guildId: string, reportUrl: string): Promise<MessagePayload> {
+  const code = extractReportCode(reportUrl);
+  if (!code) {
+    return {
+      content:
+        '❌ Lien de rapport invalide. Exemple :\n`https://classic.warcraftlogs.com/reports/aBcD1234efGh`',
+    };
+  }
+
+  const report = await getReportTop(code, cfg.classic ?? false);
+
+  // Met à jour tout le roster déjà en base (grades, rôles, pseudos, tableau).
+  await runRefresh(guildId).catch(() => {});
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = report.players.slice(0, 10);
+  const lines = top.length
+    ? top.map((p, i) => {
+        const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
+        return `${rank} ${REPORT_ROLE_EMOJI[p.role]} **${p.name}** — ${parseEmojiFor(p.avgParse)} ${p.avgParse}% · ${p.fights} log`;
+      })
+    : ['_Aucun classement trouvé dans ce rapport._'];
+
+  const embed = {
+    color: 0xe5cc80,
+    title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
+    description: lines.join('\n'),
+    footer: {
+      text: `${report.zoneName || 'Raid'} · ${report.players.length} joueur(s) analysé(s) · roster mis à jour`,
+    },
+  };
+  return { embeds: [embed] };
 }
 
 function truncate(s: string, n: number): string {

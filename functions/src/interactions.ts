@@ -244,6 +244,20 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
       return deferredEphemeral();
     }
 
+    case 'rapport': {
+      if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
+      const lien = getOption(interaction, 'lien')!;
+      await enqueue({
+        kind: 'report',
+        applicationId: interaction.application_id,
+        token: interaction.token,
+        guildId,
+        userId,
+        reportUrl: lien,
+      });
+      return deferredEphemeral();
+    }
+
     default:
       return ephemeral('Commande inconnue.');
   }
