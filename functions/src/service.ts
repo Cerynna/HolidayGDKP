@@ -357,13 +357,16 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
   const reportUrl = `https://${host}/reports/${code}`;
 
-  // Part de split : 90% du pot ÷ nombre de parts.
+  // Part de split : 88% du pot ÷ nombre de parts (10% Top 10 + 1% RL + 1% ML prélevés).
   // Parts = override manuel, sinon présents au dernier boss (effectif de fin), sinon 25.
   const splitDenom = partsOpt && partsOpt > 0 ? partsOpt : report.endRaiders > 0 ? report.endRaiders : 25;
-  const splitPer = splitDenom ? Math.floor((pot * 0.9) / splitDenom) : 0;
+  const splitPer = splitDenom ? Math.floor((pot * 0.88) / splitDenom) : 0;
+  const rlCut = Math.round(pot * 0.01);
+  const mlCut = Math.round(pot * 0.01);
   const moneyLine =
     pot > 0
-      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(90% ÷ ${splitDenom})* · **Bonus Top :** +${fmtGold(bonusPer)}`
+      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(88% ÷ ${splitDenom})*\n` +
+        `🏆 **Bonus Top 10 :** +${fmtGold(bonusPer)}/joueur · 👑 **RL :** +${fmtGold(rlCut)} · 🎁 **ML :** +${fmtGold(mlCut)}`
       : '';
   const linkLine = `🔗 [Voir les logs du raid](${reportUrl})`;
 
