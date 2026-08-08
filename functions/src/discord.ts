@@ -116,6 +116,11 @@ export async function setRoleColor(guildId: string, roleId: string, hex: string)
   await rest('PATCH', `/guilds/${guildId}/roles/${roleId}`, { color });
 }
 
+/** Affiche (ou non) les membres de ce rôle séparément dans la liste (hoist). */
+export async function setRoleHoist(guildId: string, roleId: string, hoist: boolean): Promise<void> {
+  await rest('PATCH', `/guilds/${guildId}/roles/${roleId}`, { hoist });
+}
+
 /** Crée un rôle. Sans couleur ni permission, il n'influence pas la couleur du pseudo. */
 export async function createRole(
   guildId: string,

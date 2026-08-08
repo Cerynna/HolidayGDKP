@@ -7,6 +7,7 @@ import {
   setChannelOverwrites,
   createMessage,
   createRole,
+  setRoleHoist,
   editMessage,
   getGuildRoles,
   type PermissionOverwrite,
@@ -103,11 +104,17 @@ async function ensureChannel(
  * un serveur qui a déjà ses propres rôles garde les siens.
  */
 async function ensureRoles(guildId: string): Promise<string[]> {
-  const existing = new Set((await getGuildRoles(guildId)).map((r) => r.name.toLowerCase()));
+  const byName = new Map((await getGuildRoles(guildId)).map((r) => [r.name.toLowerCase(), r]));
   const created: string[] = [];
   for (const role of requiredRoles(cfg)) {
-    if (existing.has(role.name.toLowerCase())) continue;
-    await createRole(guildId, role.name, { color: role.color });
+    // Seuls les grades de parse ont une couleur -> ce sont eux qu'on hoiste.
+    const isParseGrade = Boolean(role.color);
+    const existing = byName.get(role.name.toLowerCase());
+    if (existing) {
+      if (isParseGrade) await setRoleHoist(guildId, existing.id, true).catch(() => {});
+      continue;
+    }
+    await createRole(guildId, role.name, { color: role.color, hoist: isParseGrade });
     created.push(role.name);
   }
   return created;
