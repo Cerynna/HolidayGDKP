@@ -292,7 +292,7 @@ async function handleComponent(interaction: GuildInteraction): Promise<unknown> 
     return buildReevalModalResponse(txt);
   }
 
-  // Rapport : recalculer (édite le message du Top)
+  // Rapport : recalculer (édite le message du Top en place)
   if (customId.startsWith(`${RPT_RECALC_PREFIX}:`)) {
     if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
     const [, code, potStr] = customId.split(':');
@@ -304,8 +304,10 @@ async function handleComponent(interaction: GuildInteraction): Promise<unknown> 
       userId: interaction.member.user.id,
       reportUrl: code,
       pot: Number(potStr) || 0,
+      channelId: interaction.channel_id ?? '',
+      messageId: interaction.message?.id ?? '',
     });
-    return deferredUpdate();
+    return deferredEphemeral();
   }
 
   // Rapport : ouvrir le modal d'exclusion

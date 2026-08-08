@@ -34,9 +34,9 @@ export async function processJob(job: PendingJob): Promise<void> {
         excludeName: job.excludeName,
       });
       if (job.messageId && job.channelId) {
-        // Exclusion : édite le message du Top existant, accuse réception en éphémère.
+        // Recalcul / exclusion : édite le message du Top en place, ack éphémère.
         await editMessage(job.channelId, job.messageId, reportPayload);
-        payload = { content: '✅ Top recalculé (joueur exclu).' };
+        payload = { content: job.excludeName ? '✅ Top recalculé (joueur exclu).' : '✅ Top recalculé.' };
       } else {
         payload = reportPayload;
       }
