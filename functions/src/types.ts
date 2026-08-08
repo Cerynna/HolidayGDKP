@@ -126,6 +126,7 @@ export interface PendingJob {
   channelId?: string; // salon d'origine, pour /tableau et /panneau (et édition de message)
   reportUrl?: string; // pour /rapport
   pot?: number; // montant total du pot (PO), pour /rapport
+  parts?: number; // nombre de parts (split) — override optionnel
   excludeName?: string; // perso à exclure du Top (pour ce rapport)
   messageId?: string; // message à éditer (recalcul/exclusion sur un message existant)
   createdAt?: number;
@@ -135,5 +136,6 @@ export interface PendingJob {
 export interface GuildReport {
   processedAt?: number;
   pot?: number;
+  parts?: number; // nombre de parts pour le split (mémorisé pour recalcul)
   excluded?: string[]; // noms de perso exclus du Top (minuscules), pour CE rapport
 }

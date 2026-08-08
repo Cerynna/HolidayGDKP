@@ -199,6 +199,7 @@ export interface ReportTop {
   zoneName: string;
   bossCount: number; // nombre de boss du raid (hors agrégat)
   totalPlayers: number; // joueurs présents (avant filtre full clear)
+  endRaiders: number; // présents au dernier boss (effectif de fin = base du split)
   players: ReportPlayer[]; // FULL CLEAR uniquement, triés par avgParse décroissant
 }
 
@@ -256,6 +257,9 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
   }
   const acc = new Map<string, Acc>();
   const allBosses = new Set<number>();
+  // Présents au dernier boss (fightID le plus élevé) = effectif de fin de raid.
+  let lastFightId = -1;
+  let lastFightParticipants = new Set<string>();
 
   for (const fight of (report.rankings?.data ?? []) as any[]) {
     const encId: number | undefined = fight?.encounter?.id;
@@ -264,13 +268,18 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
     if (encId == null || encName === zoneName) continue;
     allBosses.add(encId);
 
+    const fightId: number = fight?.fightID ?? 0;
+    const participants = new Set<string>();
+
     const roles = fight?.roles ?? {};
     for (const [roleKey, roleName] of Object.entries(ROLE_MAP)) {
       for (const c of roles[roleKey]?.characters ?? []) {
-        if (typeof c.rankPercent !== 'number') continue;
         const serverName: string =
           typeof c.server === 'string' ? c.server : (c.server?.name ?? c.server?.slug ?? '');
         const key = String(c.id ?? `${c.name}-${serverName}`);
+        participants.add(key); // présent à ce combat (même sans parse)
+
+        if (typeof c.rankPercent !== 'number') continue;
         const e =
           acc.get(key) ??
           ({
@@ -286,9 +295,15 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
         acc.set(key, e);
       }
     }
+
+    if (fightId > lastFightId) {
+      lastFightId = fightId;
+      lastFightParticipants = participants;
+    }
   }
 
   const bossCount = allBosses.size;
+  const endRaiders = lastFightParticipants.size;
 
   const players: ReportPlayer[] = [...acc.values()]
     .filter((e) => e.byBoss.size === bossCount && bossCount > 0) // full clear uniquement
@@ -307,5 +322,5 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
     })
     .sort((a, b) => b.avgParse - a.avgParse);
 
-  return { title: report.title, zoneName, bossCount, totalPlayers: acc.size, players };
+  return { title: report.title, zoneName, bossCount, totalPlayers: acc.size, endRaiders, players };
 }

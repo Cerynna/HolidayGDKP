@@ -259,6 +259,8 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
       if (!hasPerm(interaction, MANAGE_ROLES)) return ephemeral('❌ Réservé aux gestionnaires de rôles.');
       const lien = getOption(interaction, 'lien')!;
       const pot = parseGold(getOption(interaction, 'pot'));
+      const partsRaw = getOption(interaction, 'parts');
+      const parts = partsRaw != null ? Number(partsRaw) || undefined : undefined;
       await enqueue({
         kind: 'report',
         applicationId: interaction.application_id,
@@ -267,6 +269,7 @@ async function handleCommand(interaction: GuildInteraction): Promise<unknown> {
         userId,
         reportUrl: lien,
         pot,
+        parts,
       });
       return deferredPublic(); // message PUBLIC
     }

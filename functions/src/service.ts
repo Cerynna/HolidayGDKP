@@ -298,6 +298,7 @@ const REPORT_ROLE_EMOJI = { tank: '🛡️', heal: '💚', dps: '⚔️' } as co
 export interface ReportOptions {
   reportUrl?: string;
   pot?: number;
+  parts?: number; // override du nombre de parts (split)
   excludeName?: string;
 }
 
@@ -316,6 +317,7 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
 
   const saved = await getReport(guildId, code);
   const pot = opts.pot ?? saved?.pot ?? 0;
+  const partsOpt = opts.parts ?? saved?.parts; // override éventuel du nombre de parts
   const excluded = new Set((saved?.excluded ?? []).map((s) => s.toLowerCase()));
   if (opts.excludeName) excluded.add(opts.excludeName.toLowerCase());
 
@@ -326,7 +328,7 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
 
   // Classement pas encore prêt (raid trop récent) : bouton pour réessayer.
   if (report.players.length === 0) {
-    await saveReport(guildId, code, { pot });
+    await saveReport(guildId, code, partsOpt ? { pot, parts: partsOpt } : { pot });
     return {
       content:
         '⏳ **Classement pas encore disponible** pour ce rapport (le raid est peut-être trop récent). ' +
@@ -355,12 +357,13 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
   const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
   const reportUrl = `https://${host}/reports/${code}`;
 
-  // Part de split : 90% du pot réparti entre TOUS les full clear (l'exclusion ne
-  // concerne que le bonus du Top 10, pas le split).
-  const splitPer = report.players.length ? Math.floor((pot * 0.9) / report.players.length) : 0;
+  // Part de split : 90% du pot ÷ nombre de parts.
+  // Parts = override manuel, sinon présents au dernier boss (effectif de fin), sinon 25.
+  const splitDenom = partsOpt && partsOpt > 0 ? partsOpt : report.endRaiders > 0 ? report.endRaiders : 25;
+  const splitPer = splitDenom ? Math.floor((pot * 0.9) / splitDenom) : 0;
   const moneyLine =
     pot > 0
-      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(90% ÷ ${report.players.length})* · **Bonus Top :** +${fmtGold(bonusPer)}`
+      ? `💰 **Pot :** ${fmtGold(pot)} · **Part/joueur :** ${fmtGold(splitPer)} *(90% ÷ ${splitDenom})* · **Bonus Top :** +${fmtGold(bonusPer)}`
       : '';
   const linkLine = `🔗 [Voir les logs du raid](${reportUrl})`;
 
@@ -386,7 +389,12 @@ export async function runReport(guildId: string, opts: ReportOptions): Promise<M
     .map((uid) => `<@${uid}>`);
   const mentionLine = mentions.length ? `👉 **À récompenser :** ${mentions.join(' ')}` : '';
 
-  await saveReport(guildId, code, { processedAt: Date.now(), pot, excluded: [...excluded] });
+  await saveReport(guildId, code, {
+    processedAt: Date.now(),
+    pot,
+    parts: splitDenom,
+    excluded: [...excluded],
+  });
 
   const footer = [
     `${report.zoneName || 'Raid'} · ${report.bossCount} boss · ${eligible.length}/${report.totalPlayers} éligibles`,

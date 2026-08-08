@@ -31,6 +31,7 @@ export async function processJob(job: PendingJob): Promise<void> {
       const reportPayload = await runReport(job.guildId, {
         reportUrl: job.reportUrl,
         pot: job.pot,
+        parts: job.parts,
         excludeName: job.excludeName,
       });
       if (job.messageId && job.channelId) {
