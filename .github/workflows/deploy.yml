@@ -1,0 +1,44 @@
+name: Deploy Firebase Functions
+
+# Déploie automatiquement les Cloud Functions à chaque push sur main
+# qui touche au code des fonctions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {} # permet aussi un déclenchement manuel depuis l'onglet Actions
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+        working-directory: functions
+
+      - name: Compiler (TypeScript)
+        run: npm run build
+        working-directory: functions
+
+      - name: Déployer sur Firebase
+        run: npx --yes firebase-tools@15 deploy --only functions --project holidaygdkp --non-interactive --force
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          # Astuce : évite l'invite de politique de nettoyage Artifact Registry en CI
+          FIREBASE_CLI_EXPERIMENTS: ''

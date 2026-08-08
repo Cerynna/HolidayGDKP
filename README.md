@@ -157,6 +157,24 @@ firebase functions:log          # logs
 cd functions && npm run typecheck
 ```
 
+### CI/CD — déploiement automatique (GitHub Actions)
+
+Le workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) déploie les
+fonctions à chaque push sur `main` touchant `functions/`.
+
+Il faut un secret **`FIREBASE_TOKEN`** dans le dépôt :
+
+```bash
+npx firebase-tools login:ci      # génère un token, à copier
+```
+
+Puis GitHub → **Settings → Secrets and variables → Actions → New repository secret** :
+nom `FIREBASE_TOKEN`, valeur = le token. Le workflow peut aussi se lancer à la main
+depuis l'onglet **Actions** (« Run workflow »).
+
+> Les *secrets applicatifs* (token Discord, clés WCL) restent dans **Secret Manager**
+> et ne sont pas nécessaires à la CI : le build ne fait que compiler et déployer.
+
 ### Permissions Discord
 
 Invitation avec les scopes `bot applications.commands` et les permissions
