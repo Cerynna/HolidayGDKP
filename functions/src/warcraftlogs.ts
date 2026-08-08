@@ -229,6 +229,7 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
         report(code: $code) {
           title
           zone { name }
+          fights(killType: Kills) { encounterID startTime friendlyPlayers }
           rankings
         }
       }
@@ -238,6 +239,7 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
       report?: {
         title: string;
         zone?: { name: string } | null;
+        fights?: Array<{ encounterID: number; startTime: number; friendlyPlayers?: number[] }> | null;
         rankings: { data?: unknown[] } | null;
       } | null;
     };
@@ -303,7 +305,15 @@ export async function getReportTop(code: string, classic = false): Promise<Repor
   }
 
   const bossCount = allBosses.size;
-  const endRaiders = lastFightParticipants.size;
+
+  // Présents au dernier boss via `fights.friendlyPlayers` : inclut les logs masqués
+  // (absents des rankings). Fallback sur les participants ranked du dernier combat.
+  const bossFights = (report.fights ?? []).filter((f) => f.encounterID > 0);
+  const lastBossFight = bossFights.reduce<(typeof bossFights)[number] | null>(
+    (best, f) => (best === null || f.startTime > best.startTime ? f : best),
+    null,
+  );
+  const endRaiders = lastBossFight?.friendlyPlayers?.length || lastFightParticipants.size;
 
   const players: ReportPlayer[] = [...acc.values()]
     .filter((e) => e.byBoss.size === bossCount && bossCount > 0) // full clear uniquement
