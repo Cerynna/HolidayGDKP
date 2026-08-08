@@ -300,21 +300,30 @@ export async function runReport(guildId: string, reportUrl: string): Promise<Mes
   // Met à jour tout le roster déjà en base (grades, rôles, pseudos, tableau).
   await runRefresh(guildId).catch(() => {});
 
+  const host = cfg.classic ? 'classic.warcraftlogs.com' : 'www.warcraftlogs.com';
   const medals = ['🥇', '🥈', '🥉'];
   const top = report.players.slice(0, 10);
+
   const lines = top.length
     ? top.map((p, i) => {
         const rank = i < 3 ? medals[i] : `**${i + 1}.**`;
-        return `${rank} ${REPORT_ROLE_EMOJI[p.role]} **${p.name}** — ${parseEmojiFor(p.avgParse)} ${p.avgParse}% · ${p.fights} log`;
+        const name = p.server
+          ? `[**${p.name}**](https://${host}/character/${cfg.region}/${slugifyServer(p.server)}/${encodeURIComponent(p.name)})`
+          : `**${p.name}**`;
+        return `${rank} ${REPORT_ROLE_EMOJI[p.role]} ${name} — ${parseEmojiFor(p.avgParse)} ${p.avgParse}%`;
       })
-    : ['_Aucun classement trouvé dans ce rapport._'];
+    : [
+        `_Aucun joueur n'a fait le raid complet (${report.bossCount} boss) dans ce rapport._`,
+      ];
 
   const embed = {
     color: 0xe5cc80,
     title: `🏆 Top ${top.length} — ${report.title || 'Raid'}`,
     description: lines.join('\n'),
     footer: {
-      text: `${report.zoneName || 'Raid'} · ${report.players.length} joueur(s) analysé(s) · roster mis à jour`,
+      text:
+        `${report.zoneName || 'Raid'} · full clear = ${report.bossCount} boss · ` +
+        `${report.players.length}/${report.totalPlayers} full clear · roster mis à jour`,
     },
   };
   return { embeds: [embed] };
